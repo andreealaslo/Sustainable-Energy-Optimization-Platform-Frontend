@@ -11,6 +11,28 @@ import {
 
 const GATEWAY_URL = 'http://localhost:8080';
 
+// Custom tick component to show the hour under the date and adjust for the +2h offset
+const MultiLineTick = ({ x, y, payload }) => {
+  if (!payload.value) return null;
+  
+  const date = new Date(payload.value);
+  // Manual offset adjustment: Adding 2 hours to correct the backend UTC storage to Romanian time
+  date.setHours(date.getHours() + 2);
+  
+  const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
+  const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={12} textAnchor="middle" fill="#141618" fontSize={10} fontWeight="500">
+        <tspan x="0" dy="1em">{dateStr}</tspan>
+        <tspan x="0" dy="1.2em" fill="#6c767e">{timeStr}</tspan>
+      </text>
+    </g>
+  );
+};
+
+
 const Dashboard = ({ token }) => {
   const [properties, setProperties] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
@@ -83,6 +105,13 @@ const Dashboard = ({ token }) => {
       setTimeout(fetchPropertyDetails, 1500);
     } catch (err) { alert("Ingestion failed"); }
   };
+  // Helper for the "Generated At" field to also handle the +2h display fix
+  const formatGeneratedDate = (ts) => {
+    if (!ts) return 'N/A';
+    const d = new Date(ts);
+    d.setHours(d.getHours() + 2);
+    return d.toLocaleString();
+  };
 
   const latest = reportData[reportData.length - 1] || {};
 
@@ -147,13 +176,22 @@ const Dashboard = ({ token }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
               <h3 className="font-bold mb-6 flex items-center gap-2"><History size={18} className="text-blue-500"/> Consumption Trend</h3>
-              <div className="h-64">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={reportData}>
+                  <BarChart data={reportData} margin={{ bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="createdAt" hide />
+                    <XAxis 
+                      dataKey="createdAt" 
+                      interval={0} 
+                      tick={<MultiLineTick />} 
+                      axisLine={false} 
+                      tickLine={false} 
+                    />
                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                    <Tooltip 
+                      labelFormatter={(val) => formatGeneratedDate(val)}
+                      contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} 
+                    />
                     <Bar dataKey="kwhUsed" radius={[4, 4, 0, 0]}>
                       {reportData.map((e, i) => <Cell key={i} fill={e.status === 'RED' ? '#ef4444' : '#3b82f6'} />)}
                     </Bar>
@@ -164,9 +202,9 @@ const Dashboard = ({ token }) => {
 
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
               <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Carbon Score History</h3>
-              <div className="h-64">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={reportData}>
+                  <AreaChart data={reportData} margin={{ bottom: 20 }}>
                     <defs>
                       <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
@@ -174,9 +212,18 @@ const Dashboard = ({ token }) => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="createdAt" hide />
+                    <XAxis 
+                      dataKey="createdAt" 
+                      interval={0} 
+                      tick={<MultiLineTick />} 
+                      axisLine={false} 
+                      tickLine={false} 
+                    />
                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none'}} />
+                    <Tooltip 
+                      labelFormatter={(val) => formatGeneratedDate(val)}
+                      contentStyle={{borderRadius: '12px', border: 'none'}} 
+                    />
                     <Area type="monotone" dataKey="carbonScore" stroke="#10b981" strokeWidth={3} fill="url(#splitColor)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -192,7 +239,7 @@ const Dashboard = ({ token }) => {
             </div>
             <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
                 <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Generated At</span>
-                <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span>
+                <span className="font-mono text-sm">{formatGeneratedDate(latest.createdAt)}</span>
             </div>
           </div>
         </>
