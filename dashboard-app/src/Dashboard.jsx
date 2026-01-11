@@ -1,162 +1,276 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, 
-  AreaChart, Area 
+  AreaChart, Area
 } from 'recharts';
-import { TrendingUp, Leaf, Zap, History } from 'lucide-react';
+import { 
+  TrendingUp, Leaf, Zap, History, Plus, Building, 
+  Activity, RefreshCw, X 
+} from 'lucide-react';
 
 const GATEWAY_URL = 'http://localhost:8080';
 
 const Dashboard = ({ token }) => {
-  const [data, setData] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState('');
+  const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [showIngestModal, setShowIngestModal] = useState(false);
 
-  // Use a fixed property ID for the demo, or extract it from user token/context
-  const propertyId = "METER-CBEAA6CF"; 
+  const config = { headers: { Authorization: `Bearer ${token}` } };
+
+  // --- Data Fetching ---
+  const fetchProperties = useCallback(async () => {
+    try {
+      // Points to the user-service via the Gateway
+      const res = await axios.get(`${GATEWAY_URL}/api/users/properties`, config);
+      setProperties(res.data);
+      if (res.data.length > 0 && !selectedPropertyId) {
+        setSelectedPropertyId(res.data[0].propertyId);
+      }
+    } catch (err) {
+      console.error("Error fetching properties", err);
+    }
+  }, [token, selectedPropertyId]);
+
+  const fetchPropertyDetails = useCallback(async () => {
+    if (!selectedPropertyId) return;
+    setLoading(true);
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/recommendations/property/${selectedPropertyId}`, config);
+      const sorted = res.data.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      setReportData(sorted);
+    } catch (err) {
+      console.error("Error fetching recommendations", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPropertyId, token]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-        
-        // 1. Fetch Billing History
-        const billingRes = await axios.get(`${GATEWAY_URL}/api/recommendations/property/${propertyId}`, config);
-        
-        // 2. Fetch Recommendations/Carbon Scores
-        const recRes = await axios.get(`${GATEWAY_URL}/api/recommendations/property/${propertyId}`, config);
+    if (token) fetchProperties();
+  }, [token, fetchProperties]);
 
-        // Sort billing history by date
-        const sortedHistory = billingRes.data.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        
-        setData(sortedHistory);
-        setRecommendations(recRes.data);
-      } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  useEffect(() => {
+    fetchPropertyDetails();
+  }, [selectedPropertyId, fetchPropertyDetails]);
 
-    if (token) fetchData();
-  }, [token]);
+  // --- Actions ---
+  const handleAddProperty = async (e) => {
+    e.preventDefault();
+    const address = e.target.address.value;
+    try {
+      // Backend generates propertyId automatically from the address-only request
+      await axios.post(`${GATEWAY_URL}/api/users/register-property`, { address }, config);
+      setShowPropertyModal(false);
+      fetchProperties(); // Refresh the list
+    } catch (err) { 
+      alert("Failed to register property. Ensure the backend endpoint /register-property exists."); 
+    }
+  };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-400 font-medium">
-      Fetching Energy Profile...
-    </div>
-  );
+  const handleIngest = async (e) => {
+    e.preventDefault();
+    const kwhUsed = parseFloat(e.target.kwh.value);
+    try {
+      await axios.post(`${GATEWAY_URL}/api/billing/ingest`, { 
+        propertyId: selectedPropertyId, 
+        kwhUsed 
+      }, config);
+      setShowIngestModal(false);
+      setTimeout(fetchPropertyDetails, 1500);
+    } catch (err) { alert("Ingestion failed"); }
+  };
 
-  const latestRec = recommendations[recommendations.length - 1] || {};
+  const latest = reportData[reportData.length - 1] || {};
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      {/* Top Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="p-4 bg-blue-50 rounded-2xl text-blue-600"><Zap size={24} /></div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Last Reading</p>
-            <p className="text-2xl font-bold">{data.length > 0 ? data[data.length-1].kwhUsed : 0} <span className="text-sm font-normal text-gray-400">kWh</span></p>
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* Property Selector & Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-slate-100 rounded-xl"><Building size={20}/></div>
+          <select 
+            value={selectedPropertyId} 
+            onChange={(e) => setSelectedPropertyId(e.target.value)}
+            className="bg-transparent font-bold text-gray-800 outline-none cursor-pointer w-full md:w-auto"
+          >
+            {properties.length === 0 && <option value="">No Properties Registered</option>}
+            {properties.map(p => (
+              <option key={p.propertyId} value={p.propertyId}>
+                {p.address}
+              </option>
+            ))}
+          </select>
         </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="p-4 bg-green-50 rounded-2xl text-green-600"><Leaf size={24} /></div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Carbon Score</p>
-            <p className="text-2xl font-bold text-green-600">{latestRec.carbonScore || 'N/A'}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="p-4 bg-purple-50 rounded-2xl text-purple-600"><TrendingUp size={24} /></div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Current Status</p>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-              latestRec.status === 'RED' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-            }`}>
-              {latestRec.status || 'STABLE'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Consumption Trend */}
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <History size={18} className="text-blue-500" /> Usage History
-            </h3>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="readingDate" 
-                  tickFormatter={(str) => new Date(str).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                  axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}}
-                />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                  cursor={{fill: '#f8fafc'}}
-                />
-                <Bar dataKey="kwhUsed" radius={[6, 6, 0, 0]}>
-                  {data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.kwhUsed > 50 ? '#ef4444' : '#3b82f6'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Carbon Intensity (FaaS Results) */}
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="font-bold text-gray-800 mb-8 flex items-center gap-2">
-            <TrendingUp size={18} className="text-green-500" /> Carbon Intensity (FaaS)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={recommendations}>
-                <defs>
-                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis hide dataKey="id" />
-                <YAxis hide />
-                <Tooltip 
-                   contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                />
-                <Area type="monotone" dataKey="carbonScore" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+        
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowPropertyModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition"
+          >
+            <Plus size={16}/> New Property
+          </button>
+          <button 
+            disabled={!selectedPropertyId}
+            onClick={() => setShowIngestModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 rounded-xl text-sm font-bold transition disabled:opacity-50"
+          >
+            <Activity size={16}/> Log Consumption
+          </button>
         </div>
       </div>
 
-      {/* Ai Recommendations */}
-      <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
-        <div className="relative z-10">
-          <h3 className="text-lg font-bold mb-2">Smart Analysis</h3>
-          <p className="text-slate-400 text-sm max-w-lg mb-6">
-            Based on your last {data.length} readings, our system suggests:
-          </p>
-          <div className="p-4 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-sm">
-            <p className="italic text-yellow-400">"{latestRec.recommendationMessage || 'Data trend looks healthy. Continue monitoring consumption peaks during morning hours.'}"</p>
-          </div>
+      {loading && selectedPropertyId ? (
+        <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
+          <RefreshCw className="animate-spin" />
+          <p>Analyzing Energy Data...</p>
         </div>
-        <Zap className="absolute -bottom-10 -right-10 text-white/5 w-64 h-64" />
+      ) : (
+        <>
+          {/* Main Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatCard label="Most Recent Consumption" value={`${latest.kwhUsed || 0} kWh`} icon={<Zap/>} color="blue" />
+            <StatCard label="Last Environmental Impact" value={`${latest.carbonScore || 0} pts`} icon={<Leaf/>} color="green" />
+            <StatCard 
+              label="System Status" 
+              value={latest.status || "STABLE"} 
+              icon={<Activity/>} 
+              color={latest.status === 'RED' ? 'red' : 'green'} 
+            />
+          </div>
+
+          {/* Visualization Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="font-bold mb-6 flex items-center gap-2"><History size={18} className="text-blue-500"/> Consumption Trend</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={reportData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="createdAt" hide />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                    <Bar dataKey="kwhUsed" radius={[4, 4, 0, 0]}>
+                      {reportData.map((e, i) => <Cell key={i} fill={e.status === 'RED' ? '#ef4444' : '#3b82f6'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Carbon Score History</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={reportData}>
+                    <defs>
+                      <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="createdAt" hide />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none'}} />
+                    <Area type="monotone" dataKey="carbonScore" stroke="#10b981" strokeWidth={3} fill="url(#splitColor)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Message Box */}
+          <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div>
+              <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Smart Recommendation</h4>
+              <p className="text-gray-300 italic">"{latest.recommendationMessage || 'Awaiting more data to generate accurate carbon insights.'}"</p>
+            </div>
+            <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
+                <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Generated At</span>
+                <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* --- Modals --- */}
+      {showPropertyModal && (
+        <Modal title="Register New Property" onClose={() => setShowPropertyModal(false)}>
+          <form onSubmit={handleAddProperty} className="space-y-4">
+            <p className="text-sm text-gray-500">Enter the physical address.</p>
+            <input 
+              name="address" 
+              placeholder="e.g. Strada 21 Decembrie 2, Cluj-Napoca" 
+              className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-gray-900 outline-none transition" 
+              required 
+            />
+            <button type="submit" className="w-full bg-gray-900 text-white p-4 rounded-2xl font-bold hover:bg-gray-800 transition shadow-lg shadow-gray-900/10">
+              Register Property
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {showIngestModal && (
+        <Modal title="Log Consumption" onClose={() => setShowIngestModal(false)}>
+          <form onSubmit={handleIngest} className="space-y-4">
+            <div className="p-4 bg-yellow-50 rounded-2xl border border-yellow-100 mb-2">
+               <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest">Selected Property</p>
+               <p className="text-gray-900 font-medium truncate">
+                {properties.find(p => p.propertyId === selectedPropertyId)?.address}
+               </p>
+            </div>
+            <input 
+              name="kwh" 
+              type="number" 
+              step="1"
+              placeholder="Total kWh used since last reading" 
+              className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-yellow-400 outline-none transition" 
+              required 
+            />
+            <button type="submit" className="w-full bg-yellow-400 text-gray-900 p-4 rounded-2xl font-bold hover:bg-yellow-500 transition shadow-lg shadow-yellow-400/10">
+              Submit Consumption
+            </button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+const StatCard = ({ label, value, icon, color }) => {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-600',
+    green: 'bg-green-50 text-green-600',
+    red: 'bg-red-50 text-red-600',
+    yellow: 'bg-yellow-50 text-yellow-600'
+  };
+  return (
+    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
+      <div className={`p-4 rounded-2xl ${colors[color]}`}>{icon}</div>
+      <div>
+        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">{label}</p>
+        <p className="text-2xl font-black text-gray-800">{value}</p>
       </div>
     </div>
   );
 };
+
+const Modal = ({ title, onClose, children }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-sm bg-black/40">
+    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-gray-900">{title}</h3>
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400"><X size={20}/></button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
 
 export default Dashboard;
