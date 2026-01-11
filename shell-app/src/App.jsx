@@ -1,7 +1,10 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { AlertCircle, Bell, LayoutDashboard, LogOut, Zap } from 'lucide-react';
+import { 
+  AlertCircle, Bell, LayoutDashboard, LogOut, Zap, 
+  MapPin, Wind, TrendingUp, X, CheckCircle 
+} from 'lucide-react';
 
 /**
  * Defensive imports for the preview environment.
@@ -48,35 +51,83 @@ const GATEWAY_URL = 'http://localhost:8080';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('jwt'));
-  const [alerts, setAlerts] = useState([]);
+  const [activeAlerts, setActiveAlerts] = useState([]); // Temporary toasts
+  const [history, setHistory] = useState([]); // Persistent history (session-only)
+  const [propertyMap, setPropertyMap] = useState({}); // { propertyId: address }
+  const [showHistory, setShowHistory] = useState(false);
+  const [refreshToggle, setRefreshToggle] = useState(0);
+
+  const propertyMapRef = useRef({});
+  useEffect(() => {
+    propertyMapRef.current = propertyMap;
+  }, [propertyMap]);
+
+  // --- Utility: Fetch Property Mapping ---
+  const fetchPropertyMap = async (tokenStr) => {
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/users/properties`, {
+        headers: { Authorization: `Bearer ${tokenStr}` }
+      });
+      const mapping = {};
+      res.data.forEach(p => { mapping[p.propertyId] = p.address; });
+      setPropertyMap(mapping);
+    } catch (err) { console.error("Could not fetch property map", err); }
+  };
+
+  useEffect(() => {
+    if (token) fetchPropertyMap(token);
+  }, [token]);
 
   useEffect(() => {
     if (!token || typeof SockJS !== 'function') return;
 
+    let stompClient = null;
+
     try {
       const socket = new SockJS(`${GATEWAY_URL}/ws-notifications`);
-      const stompClient = Stomp.Stomp.over(socket);
+      stompClient = Stomp.Stomp.over(socket);
       stompClient.debug = null; 
 
       stompClient.connect({}, () => {
         stompClient.subscribe('/topic/notifications', (message) => {
           const payload = JSON.parse(message.body);
-          setAlerts((prev) => [payload, ...prev].slice(0, 5));
+          
+          // Use the Ref to get the address without triggering an effect restart
+          const enrichedAlert = { 
+            ...payload, 
+            id: Date.now() + Math.random(), // Unique ID for keying
+            address: propertyMapRef.current[payload.propertyId] || "Smart Meter"
+          };
+          
+          // 1. Trigger Toasts (capped at 3)
+          setActiveAlerts((prev) => [enrichedAlert, ...prev].slice(0, 3));
+          
+          // 2. Add to History
+          setHistory((prev) => [enrichedAlert, ...prev]);
+
+          // 3. Trigger Dashboard Refresh
+          setRefreshToggle(prev => prev + 1);
           
           setTimeout(() => {
-            setAlerts(prev => prev.filter(a => a.timestamp !== payload.timestamp));
+            setActiveAlerts(prev => prev.filter(a => a.id !== enrichedAlert.id));
           }, 8000);
         });
       });
 
       return () => {
-        if (stompClient && stompClient.connected) {
-          stompClient.disconnect();
+        // Robust cleanup: attempt disconnect to avoid multiple active subscriptions
+        if (stompClient) {
+          try {
+            stompClient.disconnect();
+          } catch (e) {
+            // Silently handle if socket already closed
+          }
         }
       };
-    } catch (err) {
-      console.warn("WebSocket initialization skipped in current environment.");
+    } catch (err) { 
+      console.warn("WebSocket initialization failed."); 
     }
+    // Removed propertyMap from dependencies to stop the "restart" loop
   }, [token]);
 
   const handleLogin = async (email, password) => {
@@ -85,18 +136,16 @@ const App = () => {
       const jwt = res.data.token;
       localStorage.setItem('jwt', jwt);
       setToken(jwt);
+      fetchPropertyMap(jwt);
     } catch (err) {
       console.error("Login failed. Verify API Gateway is running.");
-      // MOCK for UI testing if backend is offline
-      // const mockToken = "dev-token";
-      // localStorage.setItem('jwt', mockToken);
-      // setToken(mockToken);
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('jwt');
     setToken(null);
+    setHistory([]);
   };
 
   if (!token) {
@@ -105,58 +154,124 @@ const App = () => {
 
   return (
     <BrowserRouter>
-      <div className="flex h-screen bg-gray-50 text-gray-900 overflow-hidden font-sans">
-        <aside className="w-64 bg-gray-900 text-white flex flex-col shadow-xl">
-          <div className="p-6 flex items-center gap-3 text-2xl font-black border-b border-gray-800">
-            <Zap className="text-yellow-400 fill-current" size={28} /> <span>Energy Portal</span>
+      <div className="flex h-screen bg-[#F8FAFC] text-slate-900 overflow-hidden font-sans">
+        
+        {/* Sidebar */}
+        <aside className="w-72 bg-slate-900 text-white flex flex-col shadow-2xl z-40">
+          <div className="p-8 flex items-center gap-3 text-2xl font-black border-b border-slate-800">
+            <div className="p-2 bg-yellow-400 rounded-xl text-slate-900 shadow-lg shadow-yellow-400/20">
+              <Zap size={24} fill="currentColor" />
+            </div>
+            <span className="tracking-tight">Energy Platform</span>
           </div>
-          <nav className="flex-1 p-4 space-y-1">
-            <Link to="/" className="flex items-center gap-3 p-3 rounded-xl bg-gray-800 text-white font-medium">
+          <nav className="flex-1 p-6 space-y-2">
+            <Link to="/" className="flex items-center gap-4 p-4 rounded-2xl bg-white/10 text-white font-bold transition-all border border-white/5 hover:bg-white/15">
               <LayoutDashboard size={20} /> Dashboard
             </Link>
           </nav>
-          <button onClick={handleLogout} className="m-4 p-3 flex items-center justify-center gap-3 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+          <button onClick={handleLogout} className="m-6 p-4 flex items-center justify-center gap-3 bg-red-500/10 text-red-400 rounded-2xl font-bold hover:bg-red-500 hover:text-white transition-all border border-red-500/20">
             <LogOut size={20} /> Logout
           </button>
         </aside>
 
-        <main className="flex-1 flex flex-col relative">
-          <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-10">
-            <h1 className="text-xl font-bold text-gray-800">System Overview</h1>
+        {/* Main Content */}
+        <main className="flex-1 flex flex-col relative overflow-hidden">
+          
+          {/* Header */}
+          <header className="h-24 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-12 z-30 sticky top-0">
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">System Overview</h1>
+            
             <div className="flex items-center gap-6">
-               <div className="relative p-2 bg-gray-100 rounded-full">
-                  <Bell className="text-gray-600" size={22} />
-                  {alerts.length > 0 && (
-                    <span className="absolute top-1 right-1 w-3 h-3 bg-red-600 border-2 border-white rounded-full"></span>
+               {/* Bell Notification Button */}
+               <div className="relative">
+                  <button 
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={`p-3 rounded-2xl transition-all relative ${showHistory ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <Bell size={24} />
+                    {history.length > 0 && !showHistory && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                        {history.length > 9 ? '9+' : history.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Notification Dropdown */}
+                  {showHistory && (
+                    <div className="absolute right-0 mt-4 w-[420px] bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                      <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+                        <h3 className="font-black text-lg">High Alerts History</h3>
+                        <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                      </div>
+                      <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                        {history.length === 0 ? (
+                          <div className="py-10 text-center text-slate-400 italic text-sm">No activity recorded yet.</div>
+                        ) : (
+                          history.map(item => (
+                            <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
+                              <div className="p-2 bg-red-100 text-red-600 rounded-xl h-fit mt-1"><AlertCircle size={18}/></div>
+                              <div className="space-y-1 min-w-0">
+                                <p className="font-bold text-sm text-slate-900 truncate">{item.address}</p>
+                                
+                                <div className="flex gap-3 pt-2">
+                                  <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{item.kwhUsed} kWh</span>
+                                  <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{item.carbonScore} pts</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 pt-1 italic">{new Date(item.id).toLocaleTimeString()}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   )}
                </div>
-               <div className="flex items-center gap-3">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-sm font-bold">Admin User</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-slate-200"></div>
-               </div>
+               
             </div>
           </header>
 
-          <div className="fixed top-24 right-10 z-50 space-y-3 w-80">
-            {alerts.map((alert, idx) => (
-              <div key={idx} className="bg-white border-l-4 border-red-600 p-4 shadow-2xl rounded-r-xl border border-gray-100">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="text-red-600 mt-0.5" size={20} />
-                  <div>
-                    <p className="font-bold text-gray-900">High Usage Alert</p>
-                    <p className="text-sm text-gray-600">ID: {alert.propertyId} - {alert.kwhUsed} kWh</p>
+          {/* Floating Toast Alerts (Fixed Right) */}
+          <div className="fixed top-28 right-12 z-[60] space-y-4 w-[380px] pointer-events-none">
+            {activeAlerts.map((alert) => (
+              <div key={alert.id} className="bg-slate-900 text-white p-6 shadow-2xl rounded-[2rem] border border-white/10 animate-in slide-in-from-right duration-500 pointer-events-auto overflow-hidden relative">
+                {/* Decorative background element */}
+                
+                
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-red-500 rounded-xl"><AlertCircle size={20}/></div>
+                    <div>
+                      <h4 className="font-black text-lg leading-tight">High Consumption</h4>
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <MapPin size={12} /> <span className="text-xs font-bold">{alert.address}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                      <div className="flex items-center gap-2 text-blue-400 mb-1"><Zap size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Usage</span></div>
+                      <p className="font-black text-lg">{alert.kwhUsed} <small className="text-[10px]">kWh</small></p>
+                    </div>
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                      <div className="flex items-center gap-2 text-emerald-400 mb-1"><Wind size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Score</span></div>
+                      <p className="font-black text-lg">{alert.carbonScore} <small className="text-[10px]">PTS</small></p>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+                     <p className="text-[11px] leading-relaxed text-amber-200 italic font-medium">"{alert.recommendationMessage || 'High usage detected! Consider reducing load immediately.'}"</p>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="p-10 flex-1 overflow-y-auto">
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">Loading Module...</div>}>
+          {/* Page Content / MFE Container */}
+          <div className="p-12 flex-1 overflow-y-auto">
+            <Suspense fallback={<div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400 font-bold"><Zap className="animate-spin text-indigo-600" /> Connecting to Microservices...</div>}>
                <Routes>
-                  <Route path="/" element={<DashboardMFE token={token} />} />
+                  <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} />} />
                   <Route path="*" element={<Navigate to="/" />} />
                </Routes>
             </Suspense>
@@ -174,7 +289,7 @@ const Login = ({ onLogin }) => {
       <div className="bg-white p-12 rounded-3xl shadow-2xl w-[420px]">
         <div className="flex flex-col items-center mb-10 text-center">
           <Zap className="text-yellow-400 mb-4" size={48} />
-          <h2 className="text-3xl font-black text-gray-900">Energy Portal</h2>
+          <h2 className="text-3xl font-black text-gray-900">Sustainable Energy Optimization Platform</h2>
           <p className="text-gray-500 mt-2">Sign in to view real-time consumption</p>
         </div>
         
