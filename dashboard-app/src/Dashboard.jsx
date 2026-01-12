@@ -10,13 +10,10 @@ import {
 } from 'lucide-react';
 
 const GATEWAY_URL = 'http://localhost:8080';
-
-// Custom tick component to show the hour under the date and adjust for the +2h offset
 const MultiLineTick = ({ x, y, payload }) => {
   if (!payload.value) return null;
   
   const date = new Date(payload.value);
-  // Manual offset adjustment: Adding 2 hours to correct the backend UTC storage to Romanian time
   date.setHours(date.getHours() + 2);
   
   const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
@@ -42,11 +39,8 @@ const Dashboard = ({ token }) => {
   const [showIngestModal, setShowIngestModal] = useState(false);
 
   const config = { headers: { Authorization: `Bearer ${token}` } };
-
-  // --- Data Fetching ---
   const fetchProperties = useCallback(async () => {
     try {
-      // Points to the user-service via the Gateway
       const res = await axios.get(`${GATEWAY_URL}/api/users/properties`, config);
       setProperties(res.data);
       if (res.data.length > 0 && !selectedPropertyId) {
@@ -79,15 +73,13 @@ const Dashboard = ({ token }) => {
     fetchPropertyDetails();
   }, [selectedPropertyId, fetchPropertyDetails]);
 
-  // --- Actions ---
   const handleAddProperty = async (e) => {
     e.preventDefault();
     const address = e.target.address.value;
     try {
-      // Backend generates propertyId automatically from the address-only request
       await axios.post(`${GATEWAY_URL}/api/users/register-property`, { address }, config);
       setShowPropertyModal(false);
-      fetchProperties(); // Refresh the list
+      fetchProperties();
     } catch (err) { 
       alert("Failed to register property. Ensure the backend endpoint /register-property exists."); 
     }
@@ -105,7 +97,7 @@ const Dashboard = ({ token }) => {
       setTimeout(fetchPropertyDetails, 1500);
     } catch (err) { alert("Ingestion failed"); }
   };
-  // Helper for the "Generated At" field to also handle the +2h display fix
+
   const formatGeneratedDate = (ts) => {
     if (!ts) return 'N/A';
     const d = new Date(ts);

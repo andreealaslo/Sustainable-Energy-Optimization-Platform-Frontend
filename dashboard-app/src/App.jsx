@@ -2,15 +2,10 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Zap, ShieldCheck, LogOut, Key, Mail, Layout, AlertCircle } from 'lucide-react';
 
-/**
- * Defensive imports for the preview environment.
- * These will work normally in your local environment after npm install.
- */
 let Dashboard;
 try {
   Dashboard = require('./Dashboard').default;
 } catch (e) {
-  // Fallback mock for preview environment
   Dashboard = ({ token }) => (
     <div className="p-8 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
       <div className="flex items-center gap-3 text-amber-600 mb-4">
@@ -35,17 +30,9 @@ try {
 try {
   require('./index.css');
 } catch (e) {
-  // Ignore missing CSS in preview
 }
 
 const GATEWAY_URL = 'http://localhost:8080';
-
-/**
- * Standalone Wrapper for the Dashboard Micro Frontend.
- * This file serves as the "Host" when running on Port 3001.
- * It demonstrates that the Dashboard component is truly decoupled 
- * from the main Shell application.
- */
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('jwt'));
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -58,11 +45,8 @@ const App = () => {
     setIsLoggingIn(true);
     
     try {
-      // Direct call to the API Gateway to authenticate for the 3001 origin
       const res = await axios.post(`${GATEWAY_URL}/api/users/login`, loginForm);
       const jwt = res.data.token;
-      
-      // Store token specifically for this origin (localhost:3001)
       localStorage.setItem('jwt', jwt);
       setToken(jwt);
     } catch (err) {
@@ -76,8 +60,6 @@ const App = () => {
     localStorage.removeItem('jwt');
     setToken(null);
   };
-
-  // --- UNAUTHENTICATED STATE (Standalone Login) ---
   if (!token) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-950 font-sans p-6 text-slate-900">
@@ -134,7 +116,6 @@ const App = () => {
     );
   }
 
-  // --- AUTHENTICATED STATE (Component Workbench) ---
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <nav className="h-20 bg-slate-900 border-b border-slate-100 px-10 flex items-center justify-between sticky top-0 z-50 shadow-sm">
