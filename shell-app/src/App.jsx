@@ -3,28 +3,21 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { 
   AlertCircle, Bell, LayoutDashboard, LogOut, Zap, 
-  MapPin, Wind, TrendingUp, X, CheckCircle 
+  MapPin, Wind, TrendingUp, X, CheckCircle, User, Mail, Lock 
 } from 'lucide-react';
 
-/**
- * Defensive imports for the preview environment.
- * These will work normally in your local environment after npm install.
- */
 let Stomp;
 let SockJS;
 
 try {
-  // Use web-compatible entry point for stompjs
   Stomp = require('stompjs/lib/stomp');
 } catch (e) {
-  // Fallback mock for preview
   Stomp = { Stomp: { over: () => ({ connect: () => {}, subscribe: () => {}, disconnect: () => {} }) } };
 }
 
 try {
   SockJS = require('sockjs-client');
 } catch (e) {
-  // Fallback mock for preview
   SockJS = function() { return {}; };
 }
 
@@ -51,9 +44,9 @@ const GATEWAY_URL = 'http://localhost:8080';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('jwt'));
-  const [activeAlerts, setActiveAlerts] = useState([]); // Temporary toasts
-  const [history, setHistory] = useState([]); // Persistent history (session-only)
-  const [propertyMap, setPropertyMap] = useState({}); // { propertyId: address }
+  const [activeAlerts, setActiveAlerts] = useState([]); 
+  const [history, setHistory] = useState([]); 
+  const [propertyMap, setPropertyMap] = useState({}); 
   const [showHistory, setShowHistory] = useState(false);
   const [refreshToggle, setRefreshToggle] = useState(0);
 
@@ -62,7 +55,6 @@ const App = () => {
     propertyMapRef.current = propertyMap;
   }, [propertyMap]);
 
-  // --- Utility: Fetch Property Mapping ---
   const fetchPropertyMap = async (tokenStr) => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/api/users/properties`, {
@@ -91,21 +83,14 @@ const App = () => {
       stompClient.connect({}, () => {
         stompClient.subscribe('/topic/notifications', (message) => {
           const payload = JSON.parse(message.body);
-          
-          // Use the Ref to get the address without triggering an effect restart
           const enrichedAlert = { 
             ...payload, 
-            id: Date.now() + Math.random(), // Unique ID for keying
+            id: Date.now() + Math.random(),
             address: propertyMapRef.current[payload.propertyId] || "Smart Meter"
           };
-          
-          // 1. Trigger Toasts (capped at 3)
-          setActiveAlerts((prev) => [enrichedAlert, ...prev].slice(0, 3));
-          
-          // 2. Add to History
-          setHistory((prev) => [enrichedAlert, ...prev]);
 
-          // 3. Trigger Dashboard Refresh
+          setActiveAlerts((prev) => [enrichedAlert, ...prev].slice(0, 3));
+          setHistory((prev) => [enrichedAlert, ...prev]);
           setRefreshToggle(prev => prev + 1);
           
           setTimeout(() => {
@@ -115,19 +100,16 @@ const App = () => {
       });
 
       return () => {
-        // Robust cleanup: attempt disconnect to avoid multiple active subscriptions
         if (stompClient) {
           try {
             stompClient.disconnect();
           } catch (e) {
-            // Silently handle if socket already closed
           }
         }
       };
     } catch (err) { 
       console.warn("WebSocket initialization failed."); 
     }
-    // Removed propertyMap from dependencies to stop the "restart" loop
   }, [token]);
 
   const handleLogin = async (email, password) => {
@@ -139,6 +121,7 @@ const App = () => {
       fetchPropertyMap(jwt);
     } catch (err) {
       console.error("Login failed. Verify API Gateway is running.");
+      alert("Invalid credentials or server error.");
     }
   };
 
@@ -234,9 +217,6 @@ const App = () => {
           <div className="fixed top-28 right-12 z-[60] space-y-4 w-[380px] pointer-events-none">
             {activeAlerts.map((alert) => (
               <div key={alert.id} className="bg-slate-900 text-white p-6 shadow-2xl rounded-[2rem] border border-white/10 animate-in slide-in-from-right duration-500 pointer-events-auto overflow-hidden relative">
-                {/* Decorative background element */}
-                
-                
                 <div className="relative z-10 space-y-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-red-500 rounded-xl"><AlertCircle size={20}/></div>
@@ -260,7 +240,7 @@ const App = () => {
                   </div>
 
                   <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
-                     <p className="text-[11px] leading-relaxed text-amber-200 italic font-medium">"{alert.recommendationMessage || 'High usage detected! Consider reducing load immediately.'}"</p>
+                      <p className="text-[11px] leading-relaxed text-amber-200 italic font-medium">"{alert.recommendationMessage || 'High usage detected! Consider reducing load immediately.'}"</p>
                   </div>
                 </div>
               </div>
@@ -283,37 +263,143 @@ const App = () => {
 };
 
 const Login = ({ onLogin }) => {
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [view, setView] = useState('login');
+  const [form, setForm] = useState({ fullName: '', email: '', password: '' });
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccess('');
+    try {
+      await axios.post(`${GATEWAY_URL}/api/users/register`, {
+        fullName: form.fullName,
+        email: form.email,
+        password: form.password
+      });
+      setSuccess("Account created successfully! You can now sign in.");
+      setView('login');
+      setForm(prev => ({ ...prev, fullName: '', password: '' }));
+    } catch (err) {
+      console.error("Registration error", err);
+      alert("Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-950">
-      <div className="bg-white p-12 rounded-3xl shadow-2xl w-[420px]">
+    <div className="h-screen flex items-center justify-center bg-gray-950 p-6">
+      <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-md border border-slate-100 animate-in zoom-in duration-300">
         <div className="flex flex-col items-center mb-10 text-center">
           <Zap className="text-yellow-400 mb-4" size={48} />
-          <h2 className="text-3xl font-black text-gray-900">Sustainable Energy Optimization Platform</h2>
-          <p className="text-gray-500 mt-2">Sign in to view real-time consumption</p>
-        </div>
-        
-        <div className="space-y-4">
-          <input 
-            type="email" 
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors"
-            placeholder="Email Address"
-            onChange={e => setForm({...form, email: e.target.value})}
-          />
-          <input 
-            type="password" 
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors"
-            placeholder="Password"
-            onChange={e => setForm({...form, password: e.target.value})}
-          />
+          <h2 className="text-3xl font-black text-gray-900 leading-tight">
+            {view === 'login' ? 'Sustainable Energy Optimization' : 'Create an Account'}
+          </h2>
+          <p className="text-gray-500 mt-2 font-medium">
+            {view === 'login' ? 'Sign in to view real-time consumption' : 'Join the energy optimization platform'}
+          </p>
         </div>
 
-        <button 
-          onClick={() => onLogin(form.email, form.password)}
-          className="w-full mt-10 bg-gray-900 text-white p-5 rounded-2xl font-bold transition-all hover:bg-gray-800"
-        >
-          Sign In
-        </button>
+        {success && (
+          <div className="mb-6 p-4 bg-green-50 text-green-700 text-sm font-bold rounded-2xl border border-green-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+            <CheckCircle size={18} /> {success}
+          </div>
+        )}
+        
+        {view === 'login' ? (
+          <div className="space-y-4">
+            <div className="relative">
+              <Mail className="absolute left-4 top-4 text-slate-400" size={20} />
+              <input 
+                type="email" 
+                className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
+                placeholder="Email Address"
+                value={form.email}
+                onChange={e => setForm({...form, email: e.target.value})}
+              />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-4 top-4 text-slate-400" size={20} />
+              <input 
+                type="password" 
+                className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
+                placeholder="Password"
+                value={form.password}
+                onChange={e => setForm({...form, password: e.target.value})}
+              />
+            </div>
+
+            <div className="pt-6 space-y-4">
+              <button 
+                onClick={() => onLogin(form.email, form.password)}
+                className="w-full bg-gray-900 text-white p-5 rounded-2xl font-bold transition-all hover:bg-gray-800 shadow-xl shadow-gray-900/10"
+              >
+                Sign In
+              </button>
+              <button 
+                onClick={() => { setView('register'); setSuccess(''); }}
+                className="w-full bg-slate-100 text-slate-700 p-5 rounded-2xl font-bold transition-all hover:bg-slate-200"
+              >
+                Register
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div className="relative">
+              <User className="absolute left-4 top-4 text-slate-400" size={20} />
+              <input 
+                type="text" 
+                className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
+                placeholder="Full Name"
+                required
+                value={form.fullName}
+                onChange={e => setForm({...form, fullName: e.target.value})}
+              />
+            </div>
+            <div className="relative">
+              <Mail className="absolute left-4 top-4 text-slate-400" size={20} />
+              <input 
+                type="email" 
+                className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
+                placeholder="Email Address"
+                required
+                value={form.email}
+                onChange={e => setForm({...form, email: e.target.value})}
+              />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-4 top-4 text-slate-400" size={20} />
+              <input 
+                type="password" 
+                className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
+                placeholder="Password"
+                required
+                value={form.password}
+                onChange={e => setForm({...form, password: e.target.value})}
+              />
+            </div>
+
+            <div className="pt-6 space-y-4">
+              <button 
+                type="submit"
+                disabled={loading}
+                className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-bold transition-all hover:bg-indigo-700 shadow-xl shadow-indigo-100 disabled:opacity-50"
+              >
+                {loading ? "Creating Account..." : "Create Account"}
+              </button>
+              <button 
+                type="button"
+                onClick={() => setView('login')}
+                className="w-full bg-transparent text-slate-500 p-4 rounded-2xl font-bold transition-all hover:bg-slate-50"
+              >
+                Back to Login
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
