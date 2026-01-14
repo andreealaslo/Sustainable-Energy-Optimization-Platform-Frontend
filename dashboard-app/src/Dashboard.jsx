@@ -221,6 +221,19 @@ const Dashboard = ({ token }) => {
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* Message Box */}
+          <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div>
+              <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Smart Recommendation</h4>
+              <p className="text-gray-300 italic">"{latest.recommendationMessage || 'Awaiting more data to generate accurate carbon insights.'}"</p>
+            </div>
+            <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
+                <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Generated At</span>
+                <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          </div>
+          
           </div>
 
           
