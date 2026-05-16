@@ -10,6 +10,39 @@ import {
 } from 'lucide-react';
 
 const GATEWAY_URL = 'http://localhost:8080';
+
+const statusToColorKey = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'very high':
+      return 'red';
+    case 'high':
+      return 'orange';
+    case 'moderate':
+      return 'yellow';
+    case 'low':
+    case 'very low':
+      return 'green';
+    default:
+      return 'blue';
+  }
+};
+
+const statusToHex = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'very high':
+      return '#ef4444';
+    case 'high':
+      return '#f97316';
+    case 'moderate':
+      return '#fbbf24';
+    case 'low':
+    case 'very low':
+      return '#10b981';
+    default:
+      return '#3b82f6';
+  }
+};
+
 const MultiLineTick = ({ x, y, payload }) => {
   if (!payload.value) return null;
   
@@ -37,6 +70,7 @@ const Dashboard = ({ token }) => {
   const [loading, setLoading] = useState(true);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
+  const [simulationRunning, setSimulationRunning] = useState(false);
 
   const config = { headers: { Authorization: `Bearer ${token}` } };
   const fetchProperties = useCallback(async () => {
@@ -98,6 +132,28 @@ const Dashboard = ({ token }) => {
     } catch (err) { alert("Ingestion failed"); }
   };
 
+  const handleStartSimulation = async () => {
+    if (!selectedPropertyId) return alert('Select a property first');
+    try {
+      await axios.post(`${GATEWAY_URL}/api/billing/simulator/start`, { propertyId: selectedPropertyId }, config);
+      setSimulationRunning(true);
+    } catch (err) {
+      console.error('Start simulation failed', err);
+      alert('Failed to start simulation');
+    }
+  };
+
+  const handleStopSimulation = async () => {
+    if (!selectedPropertyId) return alert('Select a property first');
+    try {
+      await axios.post(`${GATEWAY_URL}/api/billing/simulator/stop`, { propertyId: selectedPropertyId }, config);
+      setSimulationRunning(false);
+    } catch (err) {
+      console.error('Stop simulation failed', err);
+      alert('Failed to stop simulation');
+    }
+  };
+
   const formatGeneratedDate = (ts) => {
     if (!ts) return 'N/A';
     const d = new Date(ts);
@@ -133,14 +189,28 @@ const Dashboard = ({ token }) => {
             onClick={() => setShowPropertyModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition"
           >
-            <Plus size={16}/> New Property
+            <Plus size={16}/> 
           </button>
           <button 
             disabled={!selectedPropertyId}
             onClick={() => setShowIngestModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 rounded-xl text-sm font-bold transition disabled:opacity-50"
           >
-            <Activity size={16}/> Log Consumption
+            <Activity size={16}/>
+          </button>
+          <button
+            disabled={!selectedPropertyId || simulationRunning}
+            onClick={handleStartSimulation}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition disabled:opacity-50"
+          >
+            Start Simulation
+          </button>
+          <button
+            disabled={!selectedPropertyId || !simulationRunning}
+            onClick={handleStopSimulation}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition disabled:opacity-50"
+          >
+            Stop Simulation
           </button>
         </div>
       </div>
@@ -160,7 +230,7 @@ const Dashboard = ({ token }) => {
               label="System Status" 
               value={latest.status || "STABLE"} 
               icon={<Activity/>} 
-              color={latest.status === 'RED' ? 'red' : 'green'} 
+              color={statusToColorKey(latest.status)} 
             />
           </div>
 
@@ -185,7 +255,7 @@ const Dashboard = ({ token }) => {
                       contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} 
                     />
                     <Bar dataKey="kwhUsed" radius={[4, 4, 0, 0]}>
-                      {reportData.map((e, i) => <Cell key={i} fill={e.status === 'RED' ? '#ef4444' : '#3b82f6'} />)}
+                      {reportData.map((e, i) => <Cell key={i} fill={statusToHex(e.status)} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -290,6 +360,7 @@ const StatCard = ({ label, value, icon, color }) => {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
     red: 'bg-red-50 text-red-600',
+    orange: 'bg-orange-50 text-orange-600',
     yellow: 'bg-yellow-50 text-yellow-600'
   };
   return (
