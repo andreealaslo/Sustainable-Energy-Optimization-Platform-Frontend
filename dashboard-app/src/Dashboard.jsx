@@ -43,14 +43,29 @@ const statusToHex = (status) => {
   }
 };
 
+const parseUtcTimestamp = (value) => {
+  if (!value) return null;
+  const hasTimeZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+  return new Date(hasTimeZone ? value : `${value}Z`);
+};
+
 const MultiLineTick = ({ x, y, payload }) => {
   if (!payload.value) return null;
   
-  const date = new Date(payload.value);
-  date.setHours(date.getHours() + 2);
-  
-  const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
-  const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  const date = parseUtcTimestamp(payload.value);
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  const dateStr = date.toLocaleDateString('ro-RO', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Europe/Bucharest'
+  });
+  const timeStr = date.toLocaleTimeString('ro-RO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Bucharest'
+  });
 
   return (
     <g transform={`translate(${x},${y})`}>
@@ -63,7 +78,7 @@ const MultiLineTick = ({ x, y, payload }) => {
 };
 
 // Fixed: Accepting refreshTrigger directly from Shell MFE orchestration
-const Dashboard = ({ token, refreshTrigger }) => {
+const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   const [properties, setProperties] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [reportData, setReportData] = useState([]);
@@ -163,9 +178,29 @@ const Dashboard = ({ token, refreshTrigger }) => {
 
   const formatGeneratedDate = (ts) => {
     if (!ts) return 'N/A';
-    const d = new Date(ts);
-    d.setHours(d.getHours() + 2);
-    return d.toLocaleString();
+    const date = parseUtcTimestamp(ts);
+    return date ? date.toLocaleString('ro-RO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'Europe/Bucharest'
+    }) : 'N/A';
+  };
+
+  const formatRomanianTime = (ts) => {
+    if (!ts) return 'N/A';
+    const date = parseUtcTimestamp(ts);
+    return date ? date.toLocaleTimeString('ro-RO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'Europe/Bucharest'
+    }) : 'N/A';
   };
 
   const latest = reportData[reportData.length - 1] || {};
@@ -242,8 +277,8 @@ const Dashboard = ({ token, refreshTrigger }) => {
           </div>
 
           {/* Visualization Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-2">
               <h3 className="font-bold mb-6 flex items-center gap-2"><History size={18} className="text-blue-500"/> Consumption Trend</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -269,7 +304,27 @@ const Dashboard = ({ token, refreshTrigger }) => {
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+            <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col gap-4">
+              <div>
+                <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Real-time Actionable Advice</h4>
+                <p className="text-gray-300 italic">"{ latest.recommendationMessage || 'System is stable. Continuous carbon telemetry active.'}</p>
+                <p className="text-xs text-gray-400 mt-3">
+                  Source: <a href="https://api.carbonintensity.org.uk/" target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200 underline">api.carbonintensity.org.uk</a>
+                </p>
+              </div>
+              {latestAdvice[selectedPropertyId] && (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4">
+                  <h4 className="text-green-400 font-bold text-sm mb-2">🌱 Greenest Window</h4>
+                  <p className="text-green-100 text-sm italic">{latestAdvice[selectedPropertyId]}</p>
+                </div>
+              )}
+              <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
+                <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Last Update</span>
+                <span className="font-mono text-sm">{latest.createdAt ? formatRomanianTime(latest.createdAt) : 'N/A'}</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-3">
               <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Carbon Footprint Over Time</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -296,18 +351,6 @@ const Dashboard = ({ token, refreshTrigger }) => {
                     <Area type="monotone" dataKey="carbonScore" stroke="#10b981" strokeWidth={3} fill="url(#splitColor)" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Message Box */}
-            <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 lg:col-span-2">
-              <div>
-                <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Real-time Actionable Advice</h4>
-                <p className="text-gray-300 italic">"{latest.recommendationMessage || 'System is stable. Continuous carbon telemetry active.'}"</p>
-              </div>
-              <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
-                  <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Last Update</span>
-                  <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleTimeString() : 'N/A'}</span>
               </div>
             </div>
           </div>

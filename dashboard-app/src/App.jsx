@@ -7,7 +7,7 @@ try {
   Dashboard = require('./Dashboard').default;
 } catch (e) {
   Dashboard = ({ token }) => (
-    <div className="p-8 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
+    <div className="p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
       <div className="flex items-center gap-3 text-amber-600 mb-4">
         <AlertCircle size={20} />
         <p className="font-bold uppercase tracking-widest text-xs">Component Preview Mode</p>

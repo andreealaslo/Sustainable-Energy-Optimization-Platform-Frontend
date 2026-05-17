@@ -5,7 +5,7 @@ import SockJS from 'sockjs-client';
 import * as Stomp from '@stomp/stompjs';
 import { 
   AlertCircle, Bell, LayoutDashboard, LogOut, Zap, 
-  MapPin, Wind, X, CheckCircle, User, Mail, Lock 
+  MapPin, Wind, X, CheckCircle, User, Mail, Lock, Menu 
 } from 'lucide-react';
 
 const DashboardMFE = lazy(() => 
@@ -36,6 +36,8 @@ const App = () => {
   const [propertyMap, setPropertyMap] = useState({}); 
   const [showHistory, setShowHistory] = useState(false);
   const [refreshToggle, setRefreshToggle] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [latestAdvice, setLatestAdvice] = useState({});
 
   const propertyMapRef = useRef({});
   useEffect(() => {
@@ -74,6 +76,14 @@ const App = () => {
 
         // 1. ALWAYS pulse the refresh token so the Dashboard MFE updates its graphs
         setRefreshToggle(prev => prev + 1);
+
+        // Store advice by propertyId for Dashboard to display
+        if (payload.advice && payload.propertyId) {
+          setLatestAdvice(prev => ({
+            ...prev,
+            [payload.propertyId]: payload.advice
+          }));
+        }
 
         // 2. ESCALATE to UI Toasts ONLY if it's a critical grid anomaly (ALERT)
         if (payload.type === 'ALERT') {
@@ -170,20 +180,28 @@ const App = () => {
       <div className="flex h-screen bg-[#F8FAFC] text-slate-900 overflow-hidden font-sans">
         
         {/* Sidebar */}
-        <aside className="w-72 bg-slate-900 text-white flex flex-col shadow-2xl z-40">
-          <div className="p-8 flex items-center gap-3 text-2xl font-black border-b border-slate-800">
-            <div className="p-2 bg-yellow-400 rounded-xl text-slate-900 shadow-lg shadow-yellow-400/20">
-              <Zap size={24} fill="currentColor" />
+        <aside className={`transition-all duration-300 bg-slate-900 text-white flex flex-col shadow-2xl z-40 ${sidebarOpen ? 'w-72' : 'w-20'}`}>
+          <div className={`border-b border-slate-800 ${sidebarOpen ? 'flex items-center justify-between px-6 py-5' : 'flex flex-col items-center justify-center gap-3 py-6'}`}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-yellow-400 rounded-xl text-slate-900 shadow-lg shadow-yellow-400/20">
+                <Zap size={24} fill="currentColor" />
+              </div>
+              {sidebarOpen && <span className="tracking-tight text-xl font-black">Energy Platform</span>}
             </div>
-            <span className="tracking-tight">Energy Platform</span>
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="rounded-2xl p-2 bg-slate-800 hover:bg-slate-700 transition">
+              <Menu size={20} />
+            </button>
           </div>
-          <nav className="flex-1 p-6 space-y-2">
-            <Link to="/" className="flex items-center gap-4 p-4 rounded-2xl bg-white/10 text-white font-bold transition-all border border-white/5 hover:bg-white/15">
-              <LayoutDashboard size={20} /> Dashboard
+
+          <nav className={`flex-1 ${sidebarOpen ? 'p-6' : 'px-2 py-4'} space-y-2`}>
+            <Link to="/" className={`flex items-center ${sidebarOpen ? 'gap-4 p-4' : 'justify-center p-3'} rounded-2xl bg-white/10 text-white font-bold transition-all border border-white/5 hover:bg-white/15`}>
+              <LayoutDashboard size={20} />
+              {sidebarOpen && <span>Dashboard</span>}
             </Link>
           </nav>
-          <button onClick={handleLogout} className="m-6 p-4 flex items-center justify-center gap-3 bg-red-500/10 text-red-400 rounded-2xl font-bold hover:bg-red-500 hover:text-white transition-all border border-red-500/20">
-            <LogOut size={20} /> Logout
+          <button onClick={handleLogout} className={`flex items-center transition-all bg-red-500/10 text-red-400 rounded-2xl font-bold hover:bg-red-500 hover:text-white border border-red-500/20 ${sidebarOpen ? 'm-6 p-4 gap-3 justify-center' : 'm-3 p-3 justify-center'}`}>
+            <LogOut size={20} />
+            {sidebarOpen && <span>Logout</span>}
           </button>
         </aside>
 
@@ -277,10 +295,10 @@ const App = () => {
           </div>
 
           {/* Micro-Frontend Remote MFE Sandbox Mounting Target */}
-          <div className="p-12 flex-1 overflow-y-auto">
+          <div className="pt-6 pb-12 px-12 flex-1 overflow-y-auto">
             <Suspense fallback={<div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400 font-bold"><Zap className="animate-spin text-indigo-600" /> Orchestrating System Nodes...</div>}>
                <Routes>
-                  <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} />} />
+                  <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} latestAdvice={latestAdvice} />} />
                   <Route path="*" element={<Navigate to="/" />} />
                </Routes>
             </Suspense>
