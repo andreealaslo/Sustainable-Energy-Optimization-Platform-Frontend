@@ -62,8 +62,8 @@ const MultiLineTick = ({ x, y, payload }) => {
   );
 };
 
-
-const Dashboard = ({ token }) => {
+// Fixed: Accepting refreshTrigger directly from Shell MFE orchestration
+const Dashboard = ({ token, refreshTrigger }) => {
   const [properties, setProperties] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [reportData, setReportData] = useState([]);
@@ -73,6 +73,7 @@ const Dashboard = ({ token }) => {
   const [simulationRunning, setSimulationRunning] = useState(false);
 
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  
   const fetchProperties = useCallback(async () => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/api/users/properties`, config);
@@ -99,13 +100,17 @@ const Dashboard = ({ token }) => {
     }
   }, [selectedPropertyId, token]);
 
+  // --- REFACTORED LIVE LISTENER ---
+  // Subscribes cleanly to property changes AND updates pushed down by Shell
+  useEffect(() => {
+    if (selectedPropertyId) {
+      fetchPropertyDetails();
+    }
+  }, [selectedPropertyId, refreshTrigger, fetchPropertyDetails]);
+
   useEffect(() => {
     if (token) fetchProperties();
   }, [token, fetchProperties]);
-
-  useEffect(() => {
-    fetchPropertyDetails();
-  }, [selectedPropertyId, fetchPropertyDetails]);
 
   const handleAddProperty = async (e) => {
     e.preventDefault();
@@ -115,7 +120,7 @@ const Dashboard = ({ token }) => {
       setShowPropertyModal(false);
       fetchProperties();
     } catch (err) { 
-      alert("Failed to register property. Ensure the backend endpoint /register-property exists."); 
+      alert("Failed to register property."); 
     }
   };
 
@@ -128,8 +133,10 @@ const Dashboard = ({ token }) => {
         kwhUsed 
       }, config);
       setShowIngestModal(false);
-      setTimeout(fetchPropertyDetails, 1500);
-    } catch (err) { alert("Ingestion failed"); }
+      // Let the back-to-back websocket stream handle table re-fetches now
+    } catch (err) { 
+      alert("Ingestion failed"); 
+    }
   };
 
   const handleStartSimulation = async () => {
@@ -215,7 +222,7 @@ const Dashboard = ({ token }) => {
         </div>
       </div>
 
-      {loading && selectedPropertyId ? (
+      {loading && selectedPropertyId && reportData.length === 0 ? (
         <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
           <RefreshCw className="animate-spin" />
           <p>Analyzing Energy Data...</p>
@@ -224,11 +231,11 @@ const Dashboard = ({ token }) => {
         <>
           {/* Main Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <StatCard label="Most Recent Consumption" value={`${latest.kwhUsed || 0} kWh`} icon={<Zap/>} color="blue" />
-            <StatCard label="Last Environmental Impact" value={`${latest.carbonScore || 0} pts`} icon={<Leaf/>} color="green" />
+            <StatCard label="Most Recent Consumption" value={`${latest.kwhUsed ? latest.kwhUsed.toFixed(2) : 0} kWh`} icon={<Zap/>} color="blue" />
+            <StatCard label="Last Environmental Impact" value={`${latest.carbonScore ? latest.carbonScore.toFixed(4) : 0} kg CO2`} icon={<Leaf/>} color="green" />
             <StatCard 
-              label="System Status" 
-              value={latest.status || "STABLE"} 
+              label="Grid Carbon Intensity" 
+              value={latest.status ? latest.status.toUpperCase() : "STABLE"} 
               icon={<Activity/>} 
               color={statusToColorKey(latest.status)} 
             />
@@ -244,7 +251,7 @@ const Dashboard = ({ token }) => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis 
                       dataKey="createdAt" 
-                      interval={0} 
+                      interval={Math.floor(reportData.length / 5) || 0} 
                       tick={<MultiLineTick />} 
                       axisLine={false} 
                       tickLine={false} 
@@ -263,7 +270,7 @@ const Dashboard = ({ token }) => {
             </div>
 
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-              <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Carbon Score History</h3>
+              <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Carbon Footprint Over Time</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={reportData} margin={{ bottom: 20 }}>
@@ -276,7 +283,7 @@ const Dashboard = ({ token }) => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis 
                       dataKey="createdAt" 
-                      interval={0} 
+                      interval={Math.floor(reportData.length / 5) || 0} 
                       tick={<MultiLineTick />} 
                       axisLine={false} 
                       tickLine={false} 
@@ -293,20 +300,17 @@ const Dashboard = ({ token }) => {
             </div>
 
             {/* Message Box */}
-          <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Smart Recommendation</h4>
-              <p className="text-gray-300 italic">"{latest.recommendationMessage || 'Awaiting more data to generate accurate carbon insights.'}"</p>
-            </div>
-            <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
-                <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Generated At</span>
-                <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span>
+            <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 lg:col-span-2">
+              <div>
+                <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Real-time Actionable Advice</h4>
+                <p className="text-gray-300 italic">"{latest.recommendationMessage || 'System is stable. Continuous carbon telemetry active.'}"</p>
+              </div>
+              <div className="flex-shrink-0 bg-white/10 px-6 py-3 rounded-2xl border border-white/10 backdrop-blur-md">
+                  <span className="text-xs uppercase tracking-widest font-bold text-gray-400 block mb-1">Last Update</span>
+                  <span className="font-mono text-sm">{latest.createdAt ? new Date(latest.createdAt).toLocaleTimeString() : 'N/A'}</span>
+              </div>
             </div>
           </div>
-          
-          </div>
-
-          
         </>
       )}
 
