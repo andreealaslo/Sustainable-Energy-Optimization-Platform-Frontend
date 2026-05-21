@@ -137,9 +137,7 @@ const App = () => {
       </nav>
 
       <div className="p-10 max-w-7xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
-        {/* This is the exact same component that the Shell App imports.
-          By passing the token via props, we prove it can work in any host.
-        */}
+        {}
         <Dashboard token={token} />
       </div>
     </div>

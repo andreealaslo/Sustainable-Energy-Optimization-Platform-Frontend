@@ -61,7 +61,6 @@ const App = () => {
     if (token) fetchPropertyMap(token);
   }, [token]);
 
-  // --- CENTRALIZED WEBSOCKET PIPELINE ---
   useEffect(() => {
     if (!token) return;
 
@@ -74,10 +73,8 @@ const App = () => {
         if (!message || !message.body) return;
         const payload = JSON.parse(message.body);
 
-        // 1. ALWAYS pulse the refresh token so the Dashboard MFE updates its graphs
         setRefreshToggle(prev => prev + 1);
 
-        // Store advice by propertyId for Dashboard to display
         if (payload.advice && payload.propertyId) {
           setLatestAdvice(prev => ({
             ...prev,
@@ -85,7 +82,6 @@ const App = () => {
           }));
         }
 
-        // 2. ESCALATE to UI Toasts ONLY if it's a critical grid anomaly (ALERT)
         if (payload.type === 'ALERT') {
           const currentTimestamp = Date.now();
           const enrichedAlert = { 
@@ -104,7 +100,6 @@ const App = () => {
         }
       };
 
-      // Support both legacy `stompjs` (Stomp.over) and newer @stomp/stompjs Client
       if (typeof Stomp.over === 'function') {
         stompClient = Stomp.over(socket);
         stompClient.debug = () => {};
@@ -115,7 +110,6 @@ const App = () => {
           console.error("WebSocket connection dropped. Retrying topology connection...", error);
         });
       } else if (typeof Stomp.Client === 'function' || typeof Stomp.Client === 'object') {
-        // @stomp/stompjs compatibility
         stompClient = new Stomp.Client({
           webSocketFactory: () => socket,
           debug: () => {}

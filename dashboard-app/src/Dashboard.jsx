@@ -116,7 +116,6 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   }, [selectedPropertyId, token]);
 
   // --- REFACTORED LIVE LISTENER ---
-  // Subscribes cleanly to property changes AND updates pushed down by Shell
   useEffect(() => {
     if (selectedPropertyId) {
       fetchPropertyDetails();
@@ -148,7 +147,6 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
         kwhUsed 
       }, config);
       setShowIngestModal(false);
-      // Let the back-to-back websocket stream handle table re-fetches now
     } catch (err) { 
       alert("Ingestion failed"); 
     }
