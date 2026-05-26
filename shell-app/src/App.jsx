@@ -5,7 +5,7 @@ import SockJS from 'sockjs-client';
 import * as Stomp from '@stomp/stompjs';
 import { 
   AlertCircle, Bell, LayoutDashboard, LogOut, Zap, 
-  MapPin, Wind, X, CheckCircle, User, Mail, Lock, Menu 
+  MapPin, Wind, X, CheckCircle, User, Mail, Lock, Menu, Server 
 } from 'lucide-react';
 
 const DashboardMFE = lazy(() => 
@@ -27,6 +27,21 @@ const DashboardMFE = lazy(() =>
   }))
 );
 
+// --- NEW LAZY IMPORT FOR TELEMETRY DASHBOARD ---
+const TelemetryMFE = lazy(() => 
+  import('telemetry/TelemetryDashboard').catch(() => ({
+    default: () => (
+      <div className="p-8 bg-white rounded-3xl shadow-sm border border-gray-100">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800">Green-Ops Infrastructure Telemetry</h2>
+        <div className="p-6 bg-yellow-50 border border-yellow-100 rounded-2xl text-yellow-800">
+          <p className="font-semibold">Remote "Telemetry App" not detected.</p>
+          <p className="text-sm mt-1">Verify that the Telemetry MFE module service configuration is active on its standalone host port environment.</p>
+        </div>
+      </div>
+    )
+  }))
+);
+
 const GATEWAY_URL = 'http://localhost:8080';
 
 const App = () => {
@@ -38,6 +53,11 @@ const App = () => {
   const [refreshToggle, setRefreshToggle] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [latestAdvice, setLatestAdvice] = useState({});
+  
+  // --- NEW STATE FOR TRACKING CLUSTER METRICS PAYLOADS ---
+  const [latestTelemetry, setLatestTelemetry] = useState(null);
+  const [isSustainableMode, setIsSustainableMode] = useState(true);
+  const [toggleLoading, setToggleLoading] = useState(false);
 
   const propertyMapRef = useRef({});
   useEffect(() => {
@@ -72,6 +92,12 @@ const App = () => {
       const handleMessage = (message) => {
         if (!message || !message.body) return;
         const payload = JSON.parse(message.body);
+
+        // --- INTERCEPT DEMULTIPLEX LOGIC FOR STRUCTURAL INFRASTRUCTURE METRICS ---
+        if (payload.type === 'TELEMETRY_UPDATE') {
+          setLatestTelemetry(payload);
+          return; // Demux instantly to prevent system statistics from launching user alert toasts
+        }
 
         setRefreshToggle(prev => prev + 1);
 
@@ -145,6 +171,24 @@ const App = () => {
     }
   }, [token]);
 
+  const handleToggleSustainableMode = async () => {
+    setToggleLoading(true);
+    const targetState = !isSustainableMode;
+    try {
+      // Direct configuration dispatch to our backend mapping endpoint
+      await axios.post(`${GATEWAY_URL}/api/recommendations/telemetry-config/toggle`, 
+        { enabled: targetState },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setIsSustainableMode(targetState);
+    } catch (err) {
+      console.error("Failed to broadcast telemetry mode optimization adjustments", err);
+      alert("Core configuration update failed. Check API Gateway routing mapping context status.");
+    } finally {
+      setToggleLoading(false);
+    }
+  };
+
   const handleLogin = async (email, password) => {
     try {
       const res = await axios.post(`${GATEWAY_URL}/api/users/login`, { email, password });
@@ -163,6 +207,7 @@ const App = () => {
     setToken(null);
     setHistory([]);
     setActiveAlerts([]);
+    setLatestTelemetry(null);
   };
 
   if (!token) {
@@ -192,7 +237,14 @@ const App = () => {
               <LayoutDashboard size={20} />
               {sidebarOpen && <span>Dashboard</span>}
             </Link>
+
+            {/* --- NEW GREEN-OPS INTERFACE LINKING ANCHOR --- */}
+            <Link to="/telemetry" className={`flex items-center ${sidebarOpen ? 'gap-4 p-4' : 'justify-center p-3'} rounded-2xl text-slate-400 font-bold transition-all border border-transparent hover:bg-white/10 hover:text-white`}>
+              <Server size={20} />
+              {sidebarOpen && <span>Green-Ops Analytics</span>}
+            </Link>
           </nav>
+          
           <button onClick={handleLogout} className={`flex items-center transition-all bg-red-500/10 text-red-400 rounded-2xl font-bold hover:bg-red-500 hover:text-white border border-red-500/20 ${sidebarOpen ? 'm-6 p-4 gap-3 justify-center' : 'm-3 p-3 justify-center'}`}>
             <LogOut size={20} />
             {sidebarOpen && <span>Logout</span>}
@@ -207,6 +259,23 @@ const App = () => {
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">System Overview</h1>
             
             <div className="flex items-center gap-6">
+
+              {/* --- SCIENTIFIC CONTROL ROOM ARCHITECTURAL SWITCH --- */}
+               <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
+                 <span className={`text-xs font-black uppercase tracking-wider pl-3 pr-1 ${isSustainableMode ? 'text-emerald-600' : 'text-rose-500'}`}>
+                   {isSustainableMode ? 'Async Green-Mode' : 'Sync Legacy-Mode'}
+                 </span>
+                 <button
+                   disabled={toggleLoading}
+                   onClick={handleToggleSustainableMode}
+                   className={`relative inline-flex h-8 w-14 items-center rounded-xl transition-colors outline-none duration-300 disabled:opacity-40 ${isSustainableMode ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                 >
+                   <span
+                     className={`inline-block h-5 w-5 transform rounded-lg bg-white shadow-md transition-transform duration-300 ${isSustainableMode ? 'translate-x-8' : 'translate-x-1'}`}
+                   />
+                 </button>
+               </div>
+               
                {/* Bell Notification Dropdown Control */}
                <div className="relative">
                   <button 
@@ -293,6 +362,10 @@ const App = () => {
             <Suspense fallback={<div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400 font-bold"><Zap className="animate-spin text-indigo-600" /> Orchestrating System Nodes...</div>}>
                <Routes>
                   <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} latestAdvice={latestAdvice} />} />
+                  
+                  {/* --- NEW TELEMETRY MOUNT ROUTE CONTEXT TARGET --- */}
+                  <Route path="/telemetry" element={<TelemetryMFE latestTelemetry={latestTelemetry} />} />
+                  
                   <Route path="*" element={<Navigate to="/" />} />
                </Routes>
             </Suspense>
@@ -319,7 +392,7 @@ const Login = ({ onLogin }) => {
         email: form.email,
         password: form.password
       });
-      setSuccess("Account instantiated successfully! Procced to authentication.");
+      setSuccess("Account instantiated successfully! Proceed to authentication.");
       setView('login');
       setForm(prev => ({ ...prev, fullName: '', password: '' }));
     } catch (err) {

@@ -35,6 +35,7 @@ module.exports = {
       remotes: {
         // The Shell looks for the Dashboard remote on port 3001
         dashboard: 'dashboard@http://localhost:3001/remoteEntry.js',
+        telemetry: 'telemetry@http://localhost:3002/remoteEntry.js', 
       },
       shared: { 
         react: { singleton: true, requiredVersion: '^18.2.0' }, 
