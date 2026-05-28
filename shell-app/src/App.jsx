@@ -27,7 +27,6 @@ const DashboardMFE = lazy(() =>
   }))
 );
 
-// --- NEW LAZY IMPORT FOR TELEMETRY DASHBOARD ---
 const TelemetryMFE = lazy(() => 
   import('telemetry/TelemetryDashboard').catch(() => ({
     default: () => (
@@ -54,7 +53,6 @@ const App = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [latestAdvice, setLatestAdvice] = useState({});
   
-  // --- NEW STATE FOR TRACKING CLUSTER METRICS PAYLOADS ---
   const [latestTelemetry, setLatestTelemetry] = useState(null);
   const [isSustainableMode, setIsSustainableMode] = useState(true);
   const [toggleLoading, setToggleLoading] = useState(false);
@@ -74,6 +72,10 @@ const App = () => {
       setPropertyMap(mapping);
     } catch (err) { 
       console.error("Could not fetch property map", err); 
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        console.warn("Detected expired or unauthenticated secure signature layout. Purging local token...");
+        handleLogout();
+      }
     }
   };
 
@@ -93,10 +95,9 @@ const App = () => {
         if (!message || !message.body) return;
         const payload = JSON.parse(message.body);
 
-        // --- INTERCEPT DEMULTIPLEX LOGIC FOR STRUCTURAL INFRASTRUCTURE METRICS ---
         if (payload.type === 'TELEMETRY_UPDATE') {
           setLatestTelemetry(payload);
-          return; // Demux instantly to prevent system statistics from launching user alert toasts
+          return; 
         }
 
         setRefreshToggle(prev => prev + 1);
@@ -175,7 +176,6 @@ const App = () => {
     setToggleLoading(true);
     const targetState = !isSustainableMode;
     try {
-      // Direct configuration dispatch to our backend mapping endpoint
       await axios.post(`${GATEWAY_URL}/api/recommendations/telemetry-config/toggle`, 
         { enabled: targetState },
         { headers: { Authorization: `Bearer ${token}` } }

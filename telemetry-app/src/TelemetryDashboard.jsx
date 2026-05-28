@@ -8,17 +8,35 @@ import {
 } from 'lucide-react';
 
 const containerColors = {
-  recommendation: '#6366f1', // Indigo
-  carbon: '#10b981',         // Emerald
-  kafka: '#f59e0b',          // Amber
-  rabbitmq: '#f97316',       // Orange
-  postgres: '#3b82f6',       // Blue
-  notification: '#ec4899',   // Pink
-  api: '#8b5cf6',            // Purple
-  nginx: '#64748b',          // Slate
-  zookeeper: '#14b8a6',      // Teal
-  user: '#a855f7',           // Purple-Light
-  billing: '#eab308'         // Yellow
+  recommendation: '#6366f1', 
+  carbon: '#10b981',         
+  kafka: '#f59e0b',          
+  rabbitmq: '#f97316',       
+  postgres: '#3b82f6',       
+  notification: '#ec4899',   
+  api: '#8b5cf6',            
+  nginx: '#64748b',          
+  zookeeper: '#14b8a6',      
+  user: '#a855f7',          
+  billing: '#eab308'         
+};
+
+const parseUtcTimestamp = (value) => {
+  if (!value) return null;
+  const hasTimeZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+  return new Date(hasTimeZone ? value : `${value}Z`);
+};
+
+const formatToRomanianTime = (isoString) => {
+  if (!isoString) return 'N/A';
+  const date = parseUtcTimestamp(isoString);
+   return date ? date.toLocaleTimeString('ro-RO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'Europe/Bucharest'
+    }) : 'N/A';
 };
 
 const TelemetryDashboard = ({ latestTelemetry = null }) => {
@@ -31,13 +49,11 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
     setCurrentMetrics(latestTelemetry);
     setMetricsHistory(prev => {
       const updated = [...prev, latestTelemetry];
-      // Keep trailing 15 transactional logs to prevent client DOM leaks
       if (updated.length > 15) return updated.slice(1);
       return updated;
     });
   }, [latestTelemetry]);
 
-  // Map individual key-pairs to structured chart arrays dynamically
   const buildContainerChartData = () => {
     if (!currentMetrics || !currentMetrics.containerCpuMetrics) return [];
     return Object.entries(currentMetrics.containerCpuMetrics).map(([name, value]) => ({
@@ -142,9 +158,9 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
             </div>
           </div>
           
-          <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+        <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
             <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Telemetry Generation Frame</span>
-            <span className="font-mono text-xs truncate block text-indigo-300">{new Date(currentMetrics.timestamp).toLocaleTimeString()}</span>
+            <span className="font-mono text-xs truncate block text-indigo-300">{formatToRomanianTime(currentMetrics.timestamp)}</span>
           </div>
         </div>
 
@@ -165,14 +181,14 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="timestamp" 
-                  tickFormatter={(t) => new Date(t).toLocaleTimeString()} 
+                  tickFormatter={(t) => formatToRomanianTime(t)} 
                   axisLine={false} 
                   tickLine={false} 
                   tick={{fill: '#94a3b8', fontSize: 11}}
                 />
                 <YAxis domain={[10, 65]} axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
                 <Tooltip 
-                  labelFormatter={(t) => new Date(t).toLocaleTimeString()}
+                  labelFormatter={(t) => formatToRomanianTime(t)}
                   contentStyle={{borderRadius: '12px', border: 'none'}}
                 />
                 <Area type="monotone" dataKey="totalPowerWatts" stroke="#3b82f6" strokeWidth={3} fill="url(#powerGrad)" name="Total Watts" />
