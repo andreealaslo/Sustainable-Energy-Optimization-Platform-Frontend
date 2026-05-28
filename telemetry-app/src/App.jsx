@@ -32,7 +32,7 @@ try {
 } catch (e) {
 }
 
-const GATEWAY_URL = 'http://localhost:8080';
+const GATEWAY_URL = 'http://localhost:80';
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('jwt'));
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });

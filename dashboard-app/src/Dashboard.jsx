@@ -9,7 +9,7 @@ import {
   Activity, RefreshCw, X 
 } from 'lucide-react';
 
-const GATEWAY_URL = 'http://localhost:8080';
+const GATEWAY_URL = 'http://localhost:80';
 
 const statusToColorKey = (status) => {
   switch ((status || '').toLowerCase()) {
