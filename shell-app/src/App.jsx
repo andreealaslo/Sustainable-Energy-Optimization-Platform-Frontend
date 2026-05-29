@@ -3,12 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import SockJS from 'sockjs-client';
 import * as Stomp from '@stomp/stompjs';
-import { 
-  AlertCircle, Bell, LayoutDashboard, LogOut, Zap, 
-  MapPin, Wind, X, CheckCircle, User, Mail, Lock, Menu, Server 
+import {
+  AlertCircle, Bell, LayoutDashboard, LogOut, Zap,
+  MapPin, Wind, X, CheckCircle, User, Mail, Lock, Menu, Server
 } from 'lucide-react';
 
-const DashboardMFE = lazy(() => 
+const DashboardMFE = lazy(() =>
   import('dashboard/Dashboard').catch(() => ({
     default: () => (
       <div className="p-8 bg-white rounded-3xl shadow-sm border border-gray-100">
@@ -27,7 +27,7 @@ const DashboardMFE = lazy(() =>
   }))
 );
 
-const TelemetryMFE = lazy(() => 
+const TelemetryMFE = lazy(() =>
   import('telemetry/TelemetryDashboard').catch(() => ({
     default: () => (
       <div className="p-8 bg-white rounded-3xl shadow-sm border border-gray-100">
@@ -45,17 +45,24 @@ const GATEWAY_URL = 'http://localhost:80';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('jwt'));
-  const [activeAlerts, setActiveAlerts] = useState([]); 
-  const [history, setHistory] = useState([]); 
-  const [propertyMap, setPropertyMap] = useState({}); 
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [propertyMap, setPropertyMap] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const [refreshToggle, setRefreshToggle] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [latestAdvice, setLatestAdvice] = useState({});
-  
+
   const [latestTelemetry, setLatestTelemetry] = useState(null);
   const [isSustainableMode, setIsSustainableMode] = useState(true);
   const [toggleLoading, setToggleLoading] = useState(false);
+
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const showHistoryRef = useRef(showHistory);
+  useEffect(() => {
+    showHistoryRef.current = showHistory;
+  }, [showHistory]);
 
   const propertyMapRef = useRef({});
   useEffect(() => {
@@ -70,8 +77,8 @@ const App = () => {
       const mapping = {};
       res.data.forEach(p => { mapping[p.propertyId] = p.address; });
       setPropertyMap(mapping);
-    } catch (err) { 
-      console.error("Could not fetch property map", err); 
+    } catch (err) {
+      console.error("Could not fetch property map", err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
         console.warn("Detected expired or unauthenticated secure signature layout. Purging local token...");
         handleLogout();
@@ -97,7 +104,7 @@ const App = () => {
 
         if (payload.type === 'TELEMETRY_UPDATE') {
           setLatestTelemetry(payload);
-          return; 
+          return;
         }
 
         setRefreshToggle(prev => prev + 1);
@@ -111,8 +118,8 @@ const App = () => {
 
         if (payload.type === 'ALERT') {
           const currentTimestamp = Date.now();
-          const enrichedAlert = { 
-            ...payload, 
+          const enrichedAlert = {
+            ...payload,
             id: currentTimestamp,
             address: propertyMapRef.current[payload.propertyId] || "Smart Meter",
             displayTime: new Date(currentTimestamp).toLocaleTimeString()
@@ -120,6 +127,10 @@ const App = () => {
 
           setActiveAlerts((prev) => [enrichedAlert, ...prev].slice(0, 3));
           setHistory((prev) => [enrichedAlert, ...prev]);
+
+          if (!showHistoryRef.current) {
+            setUnreadCount(prev => prev + 1);
+          }
 
           setTimeout(() => {
             setActiveAlerts(prev => prev.filter(a => a.id !== enrichedAlert.id));
@@ -129,7 +140,7 @@ const App = () => {
 
       if (typeof Stomp.over === 'function') {
         stompClient = Stomp.over(socket);
-        stompClient.debug = () => {};
+        stompClient.debug = () => { };
         stompClient.connect({}, () => {
           console.log("Shell securely anchored to WebSocket notification stream.");
           stompClient.subscribe('/topic/notifications', handleMessage);
@@ -139,7 +150,7 @@ const App = () => {
       } else if (typeof Stomp.Client === 'function' || typeof Stomp.Client === 'object') {
         stompClient = new Stomp.Client({
           webSocketFactory: () => socket,
-          debug: () => {}
+          debug: () => { }
         });
         stompClient.onConnect = () => {
           console.log("Shell securely anchored to WebSocket notification stream.");
@@ -176,7 +187,7 @@ const App = () => {
     setToggleLoading(true);
     const targetState = !isSustainableMode;
     try {
-      await axios.post(`${GATEWAY_URL}/api/recommendations/telemetry-config/toggle`, 
+      await axios.post(`${GATEWAY_URL}/api/recommendations/telemetry-config/toggle`,
         { enabled: targetState },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -208,6 +219,15 @@ const App = () => {
     setHistory([]);
     setActiveAlerts([]);
     setLatestTelemetry(null);
+    setUnreadCount(0);
+  };
+
+  const toggleHistoryPopover = () => {
+    const nextState = !showHistory;
+    setShowHistory(nextState);
+    if (nextState) {
+      setUnreadCount(0);
+    }
   };
 
   if (!token) {
@@ -217,7 +237,7 @@ const App = () => {
   return (
     <BrowserRouter>
       <div className="flex h-screen bg-[#F8FAFC] text-slate-900 overflow-hidden font-sans">
-        
+
         {/* Sidebar */}
         <aside className={`transition-all duration-300 bg-slate-900 text-white flex flex-col shadow-2xl z-40 ${sidebarOpen ? 'w-72' : 'w-20'}`}>
           <div className={`border-b border-slate-800 ${sidebarOpen ? 'flex items-center justify-between px-6 py-5' : 'flex flex-col items-center justify-center gap-3 py-6'}`}>
@@ -238,13 +258,12 @@ const App = () => {
               {sidebarOpen && <span>Dashboard</span>}
             </Link>
 
-            {/* --- NEW GREEN-OPS INTERFACE LINKING ANCHOR --- */}
             <Link to="/telemetry" className={`flex items-center ${sidebarOpen ? 'gap-4 p-4' : 'justify-center p-3'} rounded-2xl text-slate-400 font-bold transition-all border border-transparent hover:bg-white/10 hover:text-white`}>
               <Server size={20} />
               {sidebarOpen && <span>Green-Ops Analytics</span>}
             </Link>
           </nav>
-          
+
           <button onClick={handleLogout} className={`flex items-center transition-all bg-red-500/10 text-red-400 rounded-2xl font-bold hover:bg-red-500 hover:text-white border border-red-500/20 ${sidebarOpen ? 'm-6 p-4 gap-3 justify-center' : 'm-3 p-3 justify-center'}`}>
             <LogOut size={20} />
             {sidebarOpen && <span>Logout</span>}
@@ -253,73 +272,73 @@ const App = () => {
 
         {/* Main Content Pane */}
         <main className="flex-1 flex flex-col relative overflow-hidden">
-          
+
           {/* Header */}
           <header className="h-24 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-12 z-30 sticky top-0">
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">System Overview</h1>
-            
+
             <div className="flex items-center gap-6">
 
               {/* --- SCIENTIFIC CONTROL ROOM ARCHITECTURAL SWITCH --- */}
-               <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
-                 <span className={`text-xs font-black uppercase tracking-wider pl-3 pr-1 ${isSustainableMode ? 'text-emerald-600' : 'text-rose-500'}`}>
-                   {isSustainableMode ? 'Async Green-Mode' : 'Sync Legacy-Mode'}
-                 </span>
-                 <button
-                   disabled={toggleLoading}
-                   onClick={handleToggleSustainableMode}
-                   className={`relative inline-flex h-8 w-14 items-center rounded-xl transition-colors outline-none duration-300 disabled:opacity-40 ${isSustainableMode ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                 >
-                   <span
-                     className={`inline-block h-5 w-5 transform rounded-lg bg-white shadow-md transition-transform duration-300 ${isSustainableMode ? 'translate-x-8' : 'translate-x-1'}`}
-                   />
-                 </button>
-               </div>
-               
-               {/* Bell Notification Dropdown Control */}
-               <div className="relative">
-                  <button 
-                    onClick={() => setShowHistory(!showHistory)}
-                    className={`p-3 rounded-2xl transition-all relative ${showHistory ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    <Bell size={24} />
-                    {history.length > 0 && !showHistory && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold text-white">
-                        {history.length > 9 ? '9+' : history.length}
-                      </span>
-                    )}
-                  </button>
+              <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
+                <span className={`text-xs font-black uppercase tracking-wider pl-3 pr-1 ${isSustainableMode ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {isSustainableMode ? 'Async Green-Mode' : 'Sync Legacy-Mode'}
+                </span>
+                <button
+                  disabled={toggleLoading}
+                  onClick={handleToggleSustainableMode}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-xl transition-colors outline-none duration-300 disabled:opacity-40 ${isSustainableMode ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-lg bg-white shadow-md transition-transform duration-300 ${isSustainableMode ? 'translate-x-8' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
 
-                  {/* Notification Center Popover */}
-                  {showHistory && (
-                    <div className="absolute right-0 mt-4 w-[420px] bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
-                      <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
-                        <h3 className="font-black text-lg">Eco-Alert History</h3>
-                        <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
-                      </div>
-                      <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                        {history.length === 0 ? (
-                          <div className="py-10 text-center text-slate-400 italic text-sm">No critical grid anomalies recorded.</div>
-                        ) : (
-                          history.map(item => (
-                            <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
-                              <div className="p-2 bg-red-100 text-red-600 rounded-xl h-fit mt-1"><AlertCircle size={18}/></div>
-                              <div className="space-y-1 min-w-0">
-                                <p className="font-bold text-sm text-slate-900 truncate">{item.address}</p>
-                                
-                                <div className="flex gap-3 pt-2">
-                                  <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{item.kwhUsed?.toFixed(2)} kWh</span>
-                                  <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{item.carbonScore?.toFixed(4)} kg</span>
-                                </div>
-                                <p className="text-[11px] text-slate-400 pt-1 italic">{item.displayTime}</p>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
+              {/* Bell Notification Dropdown Control */}
+              <div className="relative">
+                <button
+                  onClick={toggleHistoryPopover}
+                  className={`p-3 rounded-2xl transition-all relative ${showHistory ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  <Bell size={24} />
+                  {/* --- DYNAMIC UNREAD COUNTER INTERCEPT BADGE MODIFICATION [FIXED] --- */}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                   )}
-               </div>
+                </button>
+
+                {/* Notification Center Popover */}
+                {showHistory && (
+                  <div className="absolute right-0 mt-4 w-[420px] bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                    <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+                      <h3 className="font-black text-lg">Eco-Alert History</h3>
+                      <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                      {history.length === 0 ? (
+                        <div className="py-10 text-center text-slate-400 italic text-sm">No critical grid anomalies recorded.</div>
+                      ) : (
+                        history.map(item => (
+                          <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
+                            <div className="p-2 bg-red-100 text-red-600 rounded-xl h-fit mt-1"><AlertCircle size={18} /></div>
+                            <div className="space-y-1 min-w-0">
+                              <p className="font-bold text-sm text-slate-900 truncate">{item.address}</p>
+
+                              <div className="flex gap-3 pt-2">
+                                <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">{item.recommendationMessage}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 pt-1 italic">{item.displayTime}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -329,7 +348,7 @@ const App = () => {
               <div key={alert.id} className="bg-slate-900 text-white p-6 shadow-2xl rounded-[2rem] border border-white/10 animate-in slide-in-from-right duration-500 pointer-events-auto overflow-hidden relative">
                 <div className="relative z-10 space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-red-500 rounded-xl"><AlertCircle size={20}/></div>
+                    <div className="p-2.5 bg-red-500 rounded-xl"><AlertCircle size={20} /></div>
                     <div>
                       <h4 className="font-black text-lg leading-tight">High Intensity Surge</h4>
                       <div className="flex items-center gap-1.5 text-slate-400">
@@ -340,17 +359,17 @@ const App = () => {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
-                      <div className="flex items-center gap-2 text-blue-400 mb-1"><Zap size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Usage</span></div>
+                      <div className="flex items-center gap-2 text-blue-400 mb-1"><Zap size={14} /> <span className="text-[10px] font-black uppercase tracking-widest">Usage</span></div>
                       <p className="font-black text-lg">{alert.kwhUsed?.toFixed(2)} <small className="text-[10px]">kWh</small></p>
                     </div>
                     <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
-                      <div className="flex items-center gap-2 text-emerald-400 mb-1"><Wind size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Footprint</span></div>
+                      <div className="flex items-center gap-2 text-emerald-400 mb-1"><Wind size={14} /> <span className="text-[10px] font-black uppercase tracking-widest">Footprint</span></div>
                       <p className="font-black text-lg">{alert.carbonScore?.toFixed(4)} <small className="text-[10px]">kg</small></p>
                     </div>
                   </div>
 
                   <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
-                      <p className="text-[11px] leading-relaxed text-amber-200 italic font-medium">Grid State is heavily stained ({alert.gridIndex?.toUpperCase()}). Postponing consumption drops marginal footprints.</p>
+                    <p className="text-[11px] leading-relaxed text-amber-200 italic font-medium">{alert.recommendationMessage || `Grid State is heavily stained (${alert.gridIndex?.toUpperCase()}). Postponing consumption drops marginal footprints.`}</p>
                   </div>
                 </div>
               </div>
@@ -360,14 +379,11 @@ const App = () => {
           {/* Micro-Frontend Remote MFE Sandbox Mounting Target */}
           <div className="pt-6 pb-12 px-12 flex-1 overflow-y-auto">
             <Suspense fallback={<div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400 font-bold"><Zap className="animate-spin text-indigo-600" /> Orchestrating System Nodes...</div>}>
-               <Routes>
-                  <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} latestAdvice={latestAdvice} />} />
-                  
-                  {/* --- NEW TELEMETRY MOUNT ROUTE CONTEXT TARGET --- */}
-                  <Route path="/telemetry" element={<TelemetryMFE latestTelemetry={latestTelemetry} />} />
-                  
-                  <Route path="*" element={<Navigate to="/" />} />
-               </Routes>
+              <Routes>
+                <Route path="/" element={<DashboardMFE token={token} refreshTrigger={refreshToggle} latestAdvice={latestAdvice} />} />
+                <Route path="/telemetry" element={<TelemetryMFE latestTelemetry={latestTelemetry} />} />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
             </Suspense>
           </div>
         </main>
@@ -421,38 +437,38 @@ const Login = ({ onLogin }) => {
             <CheckCircle size={18} /> {success}
           </div>
         )}
-        
+
         {view === 'login' ? (
           <div className="space-y-4">
             <div className="relative">
               <Mail className="absolute left-4 top-4 text-slate-400" size={20} />
-              <input 
-                type="email" 
+              <input
+                type="email"
                 className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
                 placeholder="Email Address"
                 value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
+                onChange={e => setForm({ ...form, email: e.target.value })}
               />
             </div>
             <div className="relative">
               <Lock className="absolute left-4 top-4 text-slate-400" size={20} />
-              <input 
-                type="password" 
+              <input
+                type="password"
                 className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
                 placeholder="Password"
                 value={form.password}
-                onChange={e => setForm({...form, password: e.target.value})}
+                onChange={e => setForm({ ...form, password: e.target.value })}
               />
             </div>
 
             <div className="pt-6 space-y-4">
-              <button 
+              <button
                 onClick={() => onLogin(form.email, form.password)}
                 className="w-full bg-gray-900 text-white p-5 rounded-2xl font-bold transition-all hover:bg-gray-800 shadow-xl shadow-gray-900/10"
               >
                 Establish Connection
               </button>
-              <button 
+              <button
                 onClick={() => { setView('register'); setSuccess(''); }}
                 className="w-full bg-slate-100 text-slate-700 p-5 rounded-2xl font-bold transition-all hover:bg-slate-200"
               >
@@ -464,47 +480,47 @@ const Login = ({ onLogin }) => {
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="relative">
               <User className="absolute left-4 top-4 text-slate-400" size={20} />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
                 placeholder="Full Name"
                 required
                 value={form.fullName}
-                onChange={e => setForm({...form, fullName: e.target.value})}
+                onChange={e => setForm({ ...form, fullName: e.target.value })}
               />
             </div>
             <div className="relative">
               <Mail className="absolute left-4 top-4 text-slate-400" size={20} />
-              <input 
-                type="email" 
+              <input
+                type="email"
                 className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
                 placeholder="Email Address"
                 required
                 value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
+                onChange={e => setForm({ ...form, email: e.target.value })}
               />
             </div>
             <div className="relative">
               <Lock className="absolute left-4 top-4 text-slate-400" size={20} />
-              <input 
-                type="password" 
+              <input
+                type="password"
                 className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-yellow-400 transition-colors font-medium"
                 placeholder="Password"
                 required
                 value={form.password}
-                onChange={e => setForm({...form, password: e.target.value})}
+                onChange={e => setForm({ ...form, password: e.target.value })}
               />
             </div>
 
             <div className="pt-6 space-y-4">
-              <button 
+              <button
                 type="submit"
                 disabled={loading}
                 className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-bold transition-all hover:bg-indigo-700 shadow-xl disabled:opacity-50"
               >
                 {loading ? "Registering Node Assets..." : "Register System Node"}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setView('login')}
                 className="w-full bg-transparent text-slate-500 p-4 rounded-2xl font-bold transition-all hover:bg-slate-50"
