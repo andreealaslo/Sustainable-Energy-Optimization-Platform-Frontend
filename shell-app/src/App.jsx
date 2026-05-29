@@ -134,7 +134,7 @@ const App = () => {
 
           setTimeout(() => {
             setActiveAlerts(prev => prev.filter(a => a.id !== enrichedAlert.id));
-          }, 8000);
+          }, 2000);
         }
       };
 
@@ -295,14 +295,12 @@ const App = () => {
                 </button>
               </div>
 
-              {/* Bell Notification Dropdown Control */}
               <div className="relative">
                 <button
                   onClick={toggleHistoryPopover}
                   className={`p-3 rounded-2xl transition-all relative ${showHistory ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   <Bell size={24} />
-                  {/* --- DYNAMIC UNREAD COUNTER INTERCEPT BADGE MODIFICATION [FIXED] --- */}
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold text-white">
                       {unreadCount > 9 ? '9+' : unreadCount}

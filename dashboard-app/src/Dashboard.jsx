@@ -77,7 +77,6 @@ const MultiLineTick = ({ x, y, payload }) => {
   );
 };
 
-// Fixed: Accepting refreshTrigger directly from Shell MFE orchestration
 const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   const [properties, setProperties] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
@@ -86,6 +85,9 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [simulationRunning, setSimulationRunning] = useState(false);
+
+  const [forecastTimeline, setForecastTimeline] = useState([]);
+  const [greenestWindowString, setGreenestWindowString] = useState('');
 
   const config = { headers: { Authorization: `Bearer ${token}` } };
   
@@ -115,12 +117,101 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
     }
   }, [selectedPropertyId, token]);
 
-  // --- REFACTORED LIVE LISTENER ---
+  const fetchLiveGridTimeline = useCallback(async () => {
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/recommendations/grid-forecast`, config);
+      if (!res.data || res.data.length === 0) return;
+
+      let absoluteMinVal = Infinity;
+      let rawGreenestTargetItem = null;
+
+      res.data.forEach(item => {
+        const forecastVal = item.intensity?.forecast ?? Infinity;
+        if (forecastVal < absoluteMinVal) {
+          absoluteMinVal = forecastVal;
+          rawGreenestTargetItem = item; 
+        }
+      });
+
+      let targetMatchString = "";
+      if (rawGreenestTargetItem && rawGreenestTargetItem.from) {
+        try {
+          const timePart = rawGreenestTargetItem.from.split('T')[1].replace('Z', '');
+          const hour = parseInt(timePart.split(':')[0], 10);
+          const startHourStr = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+          const endHour = (hour + 1) % 24;
+          const endHourStr = endHour < 10 ? `0${endHour}:00` : `${endHour}:00`;
+          targetMatchString = `${startHourStr} - ${endHourStr}`;
+        } catch (e) {}
+      }
+      setGreenestWindowString(targetMatchString);
+
+      const topOfHourEntries = res.data.filter(item => {
+        const rawFrom = item.from || '';
+        if (rawFrom.includes('T')) {
+          const timePart = rawFrom.split('T')[1].replace('Z', '');
+          const minute = timePart.split(':')[1];
+          return minute === '00';
+        }
+        return true;
+      });
+
+      const convertedTimeline = topOfHourEntries.map(item => {
+        const rawFrom = item.from || '';
+        let displayWindow = "00:00 - 00:00";
+        
+        try {
+          if (rawFrom.includes('T')) {
+            const timePart = rawFrom.split('T')[1].replace('Z', '');
+            const hour = parseInt(timePart.split(':')[0], 10);
+            const minute = timePart.split(':')[1];
+            
+            const startHourStr = hour < 10 ? `0${hour}:${minute}` : `${hour}:${minute}`;
+            const endHour = (hour + 1) % 24;
+            const endHourStr = endHour < 10 ? `0${endHour}:${minute}` : `${endHour}:${minute}`;
+            displayWindow = `${startHourStr} - ${endHourStr}`;
+          }
+        } catch(e) { 
+          displayWindow = rawFrom; 
+        }
+
+        const intensityObj = item.intensity || {};
+        const apiIndex = (intensityObj.index || 'moderate').toLowerCase();
+        
+        let conciseIndex = "M";
+        let labelText = "Baseline Grid";
+        let helperDesc = "Standard Load";
+
+        if (apiIndex === 'very low') { 
+          conciseIndex = "VL"; labelText = "Optimal Window"; helperDesc = "Eco Ingest Active"; 
+        } else if (apiIndex === 'low') { 
+          conciseIndex = "L"; labelText = "Optimal Window"; helperDesc = "Plug In"; 
+        } else if (apiIndex === 'high') { 
+          conciseIndex = "H"; labelText = "Peak Pollution"; helperDesc = "Unplug"; 
+        } else if (apiIndex === 'very high') { 
+          conciseIndex = "VH"; labelText = "Critical Surge"; helperDesc = "Avoid Usage"; 
+        }
+
+        return {
+          timeWindow: displayWindow,
+          index: conciseIndex,
+          label: labelText,
+          desc: helperDesc
+        };
+      });
+
+      setForecastTimeline(convertedTimeline);
+    } catch (err) {
+      console.error("Could not fetch live grid demand timeline tracking data bounds:", err);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (selectedPropertyId) {
       fetchPropertyDetails();
+      fetchLiveGridTimeline(); 
     }
-  }, [selectedPropertyId, refreshTrigger, fetchPropertyDetails]);
+  }, [selectedPropertyId, refreshTrigger, fetchPropertyDetails, fetchLiveGridTimeline]);
 
   useEffect(() => {
     if (token) fetchProperties();
@@ -351,6 +442,84 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
                 </ResponsiveContainer>
               </div>
             </div>
+
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-3">
+              <div className="flex flex-col mb-4">
+                <h3 className="font-bold flex items-center gap-2 text-gray-800">
+                  <Zap size={18} className="text-yellow-500" fill="currentColor"/> 24-Hour Demand Flexibility Forecast
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  Cross-referencing live load predictions to isolate efficiency windows across localized wall-clock thresholds.
+                </p>
+              </div>
+              
+              <div className="flex flex-row overflow-x-auto gap-4 py-4 px-1 select-none scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent custom-scrollbar">
+                {forecastTimeline.map((block, idx) => {
+                  const isGreen = block.index === 'L' || block.index === 'VL';
+                  const isRed = block.index === 'H' || block.index === 'VH';
+                  
+                  const isAbsoluteGreenest = block.timeWindow === greenestWindowString && greenestWindowString !== "";
+
+                  let cardStyles = "bg-yellow-50/40 border-yellow-200/70 text-yellow-700";
+                  let badgeStyles = "bg-yellow-100/80 text-yellow-800 border-yellow-200";
+                  let svgFill = "text-yellow-500";
+                  
+                  if (isGreen) {
+                    cardStyles = "bg-emerald-50/50 border-emerald-100 text-emerald-800";
+                    badgeStyles = "bg-emerald-100/70 text-emerald-700 border-emerald-200/50";
+                    svgFill = "text-emerald-500";
+                  } else if (isRed) {
+                    cardStyles = "bg-rose-50/50 border-rose-100 text-rose-800";
+                    badgeStyles = "bg-rose-100/70 text-rose-700 border-rose-200/50";
+                    svgFill = "text-rose-500";
+                  }
+
+                  const highlightStyles = isAbsoluteGreenest 
+                    ? "ring-2 ring-emerald-400 ring-offset-2 shadow-lg" 
+                    : "";
+
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`flex-shrink-0 w-44 p-4 rounded-2xl border flex flex-col items-center text-center justify-between transition hover:shadow-md duration-200 ${cardStyles} ${highlightStyles}`}
+                    >
+                      <span className="text-xs font-black tracking-tight text-gray-500 mb-2 flex items-center gap-1 block">
+                        {block.timeWindow}
+                        {isAbsoluteGreenest && (
+                          <span className="text-[9px] font-black text-emerald-500 bg-emerald-100 px-1 py-0.25 rounded uppercase tracking-wider animate-pulse">
+                            ★ Greenest
+                          </span>
+                        )}
+                      </span>
+                      
+                      <div className="my-2 flex flex-col items-center gap-1">
+                        <svg className={`w-12 h-12 ${svgFill}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span className="font-black text-sm tracking-wide block">
+                          {block.index}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 w-full mt-2">
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-lg border block ${badgeStyles}`}>
+                          {block.label}
+                        </span>
+                        <span className="text-[11px] font-bold text-gray-600 block truncate">
+                          {block.desc}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {forecastTimeline.length === 0 && (
+                  <div className="w-full text-center py-6 text-sm italic text-gray-400">
+                    Awaiting grid lookahead serialization synchronization...
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </>
       )}

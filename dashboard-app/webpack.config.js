@@ -6,11 +6,11 @@ module.exports = {
   entry: './src/index.js',
   mode: 'development',
   devServer: {
-    port: 3001, // Different port from Shell
+    port: 3001, 
     historyApiFallback: true,
     hot: true,
     headers: {
-      "Access-Control-Allow-Origin": "*", // Required for MFE loading
+      "Access-Control-Allow-Origin": "*", 
     },
   },
   output: {
@@ -35,9 +35,8 @@ module.exports = {
   plugins: [
     new ModuleFederationPlugin({
       name: 'dashboard',
-      filename: 'remoteEntry.js', // This is the file the Shell downloads
+      filename: 'remoteEntry.js', 
       exposes: {
-        // We expose the Dashboard component
         './Dashboard': './src/Dashboard',
       },
       shared: { 
