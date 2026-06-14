@@ -88,6 +88,7 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
 
   const [forecastTimeline, setForecastTimeline] = useState([]);
   const [greenestWindowString, setGreenestWindowString] = useState('');
+  const [cacheAndGlobal, setCacheAndGlobal] = useState(null);
 
   const config = { headers: { Authorization: `Bearer ${token}` } };
   
@@ -120,12 +121,15 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   const fetchLiveGridTimeline = useCallback(async () => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/api/recommendations/grid-forecast`, config);
-      if (!res.data || res.data.length === 0) return;
+      const payload = Array.isArray(res.data) ? res.data : res.data?.forecastTimeline;
+      const incomingCacheAndGlobal = res.data?.cacheAndGlobal ?? false;
+      setCacheAndGlobal(incomingCacheAndGlobal);
+      if (!payload || payload.length === 0) return;
 
       let absoluteMinVal = Infinity;
       let rawGreenestTargetItem = null;
 
-      res.data.forEach(item => {
+      payload.forEach(item => {
         const forecastVal = item.intensity?.forecast ?? Infinity;
         if (forecastVal < absoluteMinVal) {
           absoluteMinVal = forecastVal;
@@ -146,7 +150,7 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
       }
       setGreenestWindowString(targetMatchString);
 
-      const topOfHourEntries = res.data.filter(item => {
+      const topOfHourEntries = payload.filter(item => {
         const rawFrom = item.from || '';
         if (rawFrom.includes('T')) {
           const timePart = rawFrom.split('T')[1].replace('Z', '');
@@ -207,11 +211,14 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
   }, [token]);
 
   useEffect(() => {
-    if (selectedPropertyId) {
-      fetchPropertyDetails();
-      fetchLiveGridTimeline(); 
+    if (!selectedPropertyId) return;
+
+    fetchPropertyDetails();
+
+    if (cacheAndGlobal === null || cacheAndGlobal === false) {
+      fetchLiveGridTimeline();
     }
-  }, [selectedPropertyId, refreshTrigger, fetchPropertyDetails, fetchLiveGridTimeline]);
+  }, [selectedPropertyId, refreshTrigger, fetchPropertyDetails, fetchLiveGridTimeline, cacheAndGlobal]);
 
   useEffect(() => {
     if (token) fetchProperties();
@@ -395,7 +402,7 @@ const Dashboard = ({ token, refreshTrigger, latestAdvice = {} }) => {
 
             <div className="bg-gray-900 text-white p-8 rounded-3xl shadow-xl flex flex-col gap-4">
               <div>
-                <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Real-time Actionable Advice</h4>
+                <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-2"><Leaf size={18}/> Last Real-time Actionable Advice</h4>
                 <p className="text-gray-300 italic">"{ latest.recommendationMessage || 'System is stable. Continuous carbon telemetry active.'}</p>
                 <p className="text-xs text-gray-400 mt-3">
                   Source: <a href="https://api.carbonintensity.org.uk/" target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200 underline">api.carbonintensity.org.uk</a>

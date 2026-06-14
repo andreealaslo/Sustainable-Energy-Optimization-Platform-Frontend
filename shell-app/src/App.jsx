@@ -279,7 +279,6 @@ const App = () => {
 
             <div className="flex items-center gap-6">
 
-              {/* --- SCIENTIFIC CONTROL ROOM ARCHITECTURAL SWITCH --- */}
               <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
                 <span className={`text-xs font-black uppercase tracking-wider pl-3 pr-1 ${isSustainableMode ? 'text-emerald-600' : 'text-rose-500'}`}>
                   {isSustainableMode ? 'Async Green-Mode' : 'Sync Legacy-Mode'}

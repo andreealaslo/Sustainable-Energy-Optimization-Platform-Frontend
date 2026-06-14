@@ -78,7 +78,6 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* Infrastructure Topline Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
           <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-600"><Server size={24}/></div>
@@ -105,11 +104,9 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
         </div>
       </div>
 
-      {/* Main Analysis Charting Area */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Horizontal Container Component Load Breakdown */}
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-2">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-3">
           <h3 className="font-bold mb-6 flex items-center gap-2">
             <Cpu size={18} className="text-indigo-500"/> Service Load Diagnostics
           </h3>
@@ -133,38 +130,6 @@ const TelemetryDashboard = ({ latestTelemetry = null }) => {
           </div>
         </div>
 
-        {/* Real-time Infrastructure Footprint Gauge Information Box */}
-        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl flex flex-col justify-between">
-          <div>
-            <h4 className="text-yellow-400 font-bold flex items-center gap-2 mb-3">
-              <Activity size={18}/> Green-Ops Core Status
-            </h4>
-            <p className="text-gray-300 text-sm leading-relaxed">
-              Polling native Linux container metadata via mapped host domain socket <code className="text-xs bg-white/10 px-1.5 py-0.5 rounded text-amber-200">/var/run/docker.sock</code>.
-            </p>
-            <div className="mt-6 space-y-3">
-              <div className="flex justify-between border-b border-white/5 pb-2 text-sm">
-                <span className="text-gray-400">Model Definition</span>
-                <span className="font-medium text-gray-200">Linear Power Model</span>
-              </div>
-              <div className="flex justify-between border-b border-white/5 pb-2 text-sm">
-                <span className="text-gray-400">Baseline Capacity</span>
-                <span className="font-medium text-gray-200">15.00 Watts</span>
-              </div>
-              <div className="flex justify-between pb-2 text-sm">
-                <span className="text-gray-400">Peak Scaling Threshold</span>
-                <span className="font-medium text-gray-200">60.00 Watts</span>
-              </div>
-            </div>
-          </div>
-          
-        <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Telemetry Generation Frame</span>
-            <span className="font-mono text-xs truncate block text-indigo-300">{formatToRomanianTime(currentMetrics.timestamp)}</span>
-          </div>
-        </div>
-
-        {/* Dynamic Structural Power Load Continuum Timeline */}
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 md:col-span-3">
           <h3 className="font-bold mb-6 flex items-center gap-2">
             <CpuIcon size={18} className="text-emerald-500"/> Infrastructure Cluster Power Tracking (Watts)
